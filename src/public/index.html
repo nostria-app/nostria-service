@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostria Notification Service</title>
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #4f46e5;
+            --accent-color: #818cf8;
+            --text-color: #1f2937;
+            --background-color: #f9fafb;
+            --card-background: #ffffff;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--background-color);
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 2rem 0;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+        }
+
+        header p {
+            margin: 0.5rem 0 0;
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.75rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .feature {
+            background-color: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .feature:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+        }
+
+        .api-endpoints {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .api-endpoints th,
+        .api-endpoints td {
+            text-align: left;
+            padding: 0.75rem;
+        }
+
+        .api-endpoints tr {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .api-endpoints th {
+            background-color: #f3f4f6;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .method.get {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .method.post {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .method.delete {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .endpoint {
+            font-family: monospace;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <h1>Nostria Notification Service</h1>
+            <p>Reliable Web Push notifications for Nostr users</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="card">
+            <h2>About the Service</h2>
+            <p>
+                Nostria Notification Service provides reliable web push notifications for Nostr users.
+                The service utilizes the Web Push protocol and VAPID (Voluntary Application Server Identification)
+                to deliver secure, verifiable notifications to users across devices.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Features</h2>
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="feature-icon">📲</div>
+                    <h3>Web Push Notifications</h3>
+                    <p>Receive real-time notifications across devices with the Web Push protocol.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔒</div>
+                    <h3>VAPID Protocol</h3>
+                    <p>Verifiable and secure notifications with cryptographic verification.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Premium Features</h3>
+                    <p>Enhanced notification limits and custom filtering options for premium users.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>Notification Settings</h3>
+                    <p>Control how and when you receive notifications with customizable settings.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>API Endpoints</h2>
+            <p>The following endpoints are available for developers:</p>
+            <table class="api-endpoints">
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Endpoint</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint"><a href="/api/status">/api/status</a></span></td>
+                        <td>Get service information and status</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint"><a href="/api/status/health">/api/status/health</a></span></td>
+                        <td>Health check endpoint</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint"><a href="/api/key">/api/key</a></span></td>
+                        <td>Get service public key (VAPID)</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
+                        <td>Register a web push subscription for a user</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/subscription/settings/:pubkey</span></td>
+                        <td>Get a user's notification settings</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><span class="endpoint">/api/subscription/settings/:pubkey</span></td>
+                        <td>Update a user's notification settings</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method delete">DELETE</span></td>
+                        <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
+                        <td>Delete a user's push subscription</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="note">
+                <strong>Note:</strong> Some endpoints require API key authentication.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Getting Started</h2>
+            <p>
+                To use the Nostria Notification Service, you need to:
+            </p>
+            <ol>
+                <li>Register a Web Push subscription with your Nostr public key</li>
+                <li>Configure your notification preferences</li>
+                <li>Ensure your app or service integrates with the notification API</li>
+            </ol>
+            <p>
+                For developers who want to send notifications, you need to authenticate using the API key.
+                Please contact the service administrator for API access.
+            </p>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>© 2025 Nostria Notification Service. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+
+</html>
