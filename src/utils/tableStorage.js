@@ -28,10 +28,10 @@ class TableStorageService {
       } else {
         // Use managed identity (preferred for production)
         const credential = new DefaultAzureCredential();
-        const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+        const accountName = process.env.AZURE_STORAGE_ACCOUNT;
 
         if (!accountName) {
-          throw new Error("AZURE_STORAGE_ACCOUNT_NAME environment variable is required when using managed identity");
+          throw new Error("AZURE_STORAGE_ACCOUNT environment variable is required when using managed identity");
         }
 
         this.serviceClient = new TableServiceClient(
