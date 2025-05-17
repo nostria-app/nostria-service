@@ -47,7 +47,7 @@ class WebPushService {
         subscription,
         JSON.stringify(payload)
       );
-      logger.debug('Push notification sent successfully');
+      logger.debug('Push notification sent successfully', result);
       return result;
     } catch (error) {
       logger.error(`Failed to send push notification: ${error.message}`);

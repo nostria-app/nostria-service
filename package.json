@@ -1,6 +1,6 @@
 {
   "name": "nostria-notification",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Notification Service for Nostria",
   "main": "src/index.js",
   "scripts": {
@@ -12,20 +12,22 @@
     "nostria",
     "notification",
     "web-push",
-    "VAPID"
+    "VAPID",
+    "nostr"
   ],
-  "author": "",
+  "author": "Nostria",
   "license": "MIT",
   "dependencies": {
     "@azure/data-tables": "^13.2.2",
     "@azure/identity": "^3.2.2",
-    "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
-    "web-push": "^3.6.1",
-    "winston": "^3.8.2",
+    "express": "^4.18.2",
+    "helmet": "^6.0.1",
+    "nostr-tools": "^2.13.0",
     "uuid": "^9.0.0",
-    "helmet": "^6.0.1"
+    "web-push": "^3.6.7",
+    "winston": "^3.8.2"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"

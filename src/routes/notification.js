@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const tableStorage = require('../utils/tableStorage');
 const webPush = require('../utils/webPush');
-const vasipProtocol = require('../utils/vapidProtocol');
+// const vasipProtocol = require('../utils/vapidProtocol');
 const logger = require('../utils/logger');
+
 
 /**
  * Send notification to users
@@ -30,13 +31,11 @@ router.post('/send', async (req, res) => {
       limited: []
     };
     
-    for (const pubkey of pubkeys) {
-      try {
-        // Get user's subscription
-        const subscriptionEntity = await tableStorage.getEntity(pubkey, 'notification-subscription');
+    for (const pubkey of pubkeys) {      try {        // Get all subscriptions for this user
+        const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
         
-        if (!subscriptionEntity || !subscriptionEntity.subscription) {
-          results.failed.push({ pubkey, reason: 'No subscription found' });
+        if (!subscriptionEntities.length) {
+          results.failed.push({ pubkey, reason: 'No subscriptions found' });
           continue;
         }
         
@@ -66,23 +65,49 @@ router.post('/send', async (req, res) => {
         }
         
         // Sign the notification with VAPID
-        const signedNotification = await vasipProtocol.signNotification(pubkey, notification);
+        const signedNotification = await webpush.signNotification(pubkey, notification);
         
-        // Parse subscription from string
-        const subscription = JSON.parse(subscriptionEntity.subscription);
+        let deviceSuccessCount = 0;
+        let deviceFailCount = 0;
         
-        // Send Web Push notification
-        const pushResult = await webPush.sendNotification(subscription, signedNotification);
-        
-        if (pushResult && pushResult.error === 'expired_subscription') {
-          results.failed.push({ pubkey, reason: 'Expired subscription' });
-          continue;
+        // Send notification to all user's devices
+        for (const subscriptionEntity of subscriptionEntities) {
+          try {
+            // Parse subscription from string
+            const subscription = JSON.parse(subscriptionEntity.subscription);
+            
+            // Send Web Push notification
+            const pushResult = await webPush.sendNotification(subscription, signedNotification);
+            
+            if (pushResult && pushResult.error === 'expired_subscription') {
+              logger.warn(`Expired subscription for user ${pubkey}, device key: ${subscriptionEntity.rowKey.substring(0, 16)}...`);
+              deviceFailCount++;
+              // Could delete expired subscription here if desired
+            } else {
+              deviceSuccessCount++;
+            }
+          } catch (deviceError) {
+            logger.error(`Error sending notification to device ${subscriptionEntity.rowKey.substring(0, 16)}... for user ${pubkey}: ${deviceError.message}`);
+            deviceFailCount++;
+          }
         }
         
         // Log the notification to file and database
         await webPush.logNotificationToFile(pubkey, notification);
         
-        results.success.push(pubkey);
+        if (deviceSuccessCount > 0) {
+          results.success.push({ 
+            pubkey, 
+            successCount: deviceSuccessCount,
+            failCount: deviceFailCount
+          });
+        } else {
+          results.failed.push({ 
+            pubkey, 
+            reason: 'All device notifications failed', 
+            deviceCount: deviceFailCount
+          });
+        }
       } catch (error) {
         logger.error(`Failed to send notification to ${pubkey}: ${error.message}`);
         results.failed.push({ pubkey, reason: error.message });
@@ -113,11 +138,10 @@ router.get('/status/:pubkey', async (req, res) => {
     
     if (!pubkey) {
       return res.status(400).json({ error: 'Invalid pubkey' });
-    }
-    
-    // Check subscription status
-    const subscriptionEntity = await tableStorage.getEntity(pubkey, 'notification-subscription');
-    const hasSubscription = !!subscriptionEntity;
+    }    // Check subscription status - get all user's devices
+    const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+    const hasSubscription = subscriptionEntities.length > 0;
+    const deviceCount = subscriptionEntities.length;
     
     // Check premium status
     const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
@@ -132,10 +156,10 @@ router.get('/status/:pubkey', async (req, res) => {
     const dailyLimit = isPremium
       ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || 50)
       : parseInt(process.env.FREE_TIER_DAILY_LIMIT || 5);
-    
-    const status = {
+      const status = {
       pubkey,
       hasSubscription,
+      deviceCount,
       isPremium,
       settings: settings || { enabled: true },
       notifications: {

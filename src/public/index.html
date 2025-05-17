@@ -230,11 +230,15 @@
                         <td><span class="method get">GET</span></td>
                         <td><span class="endpoint"><a href="/api/key">/api/key</a></span></td>
                         <td>Get service public key (VAPID)</td>
-                    </tr>
-                    <tr>
+                    </tr>                    <tr>
                         <td><span class="method post">POST</span></td>
                         <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
-                        <td>Register a web push subscription for a user</td>
+                        <td>Register a web push subscription for a user's device</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/subscription/devices/:pubkey</span></td>
+                        <td>Get all registered devices for a user</td>
                     </tr>
                     <tr>
                         <td><span class="method get">GET</span></td>
@@ -248,13 +252,35 @@
                     </tr>
                     <tr>
                         <td><span class="method delete">DELETE</span></td>
-                        <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
-                        <td>Delete a user's push subscription</td>
+                        <td><span class="endpoint">/api/subscription/webpush/:pubkey/:deviceKey</span></td>
+                        <td>Delete a specific device subscription for a user</td>
                     </tr>
                 </tbody>
             </table>
             <p class="note">
-                <strong>Note:</strong> Some endpoints require API key authentication.
+                <strong>Note:</strong> API endpoints require NIP-98 HTTP Authentication.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Authentication</h2>
+            <p>
+                This API uses <strong>NIP-98 HTTP Authentication</strong> for secure access to endpoints:
+            </p>
+            <ul>
+                <li>Some API requests must include authentication headers as specified in NIP-98</li>
+                <li>You need to sign your requests with your Nostr private key</li>
+                <li>Include the following headers:
+                    <ul>
+                        <li><code>Authorization: Nostr [base64-encoded-event]</code></li>
+                        <li>The event must include the HTTP method, path, and optional request body</li>
+                    </ul>
+                </li>
+                <li>The server verifies the signature against your public key to authenticate the request</li>
+            </ul>
+            <p>
+                For more details on implementation, see the 
+                <a href="https://github.com/nostr-protocol/nips/blob/master/98.md" target="_blank">NIP-98 Specification</a>.
             </p>
         </div>
 

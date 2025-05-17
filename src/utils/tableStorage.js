@@ -29,23 +29,25 @@ class TableStorageService {
         // Use managed identity (preferred for production)
         const credential = new DefaultAzureCredential();
         const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
-        
+
         if (!accountName) {
           throw new Error("AZURE_STORAGE_ACCOUNT_NAME environment variable is required when using managed identity");
         }
-        
+
         this.serviceClient = new TableServiceClient(
           `https://${accountName}.table.core.windows.net`,
           credential
         );
-        
+
         this.tableClient = new TableClient(
           `https://${accountName}.table.core.windows.net`,
           this.tableName,
           credential
         );
       }
-      
+
+      this.ensureTableExists();
+
       logger.info(`Table Storage client initialized for table: ${this.tableName}`);
     } catch (error) {
       logger.error(`Failed to initialize Table Storage client: ${error.message}`);
@@ -78,15 +80,13 @@ class TableStorageService {
    */
   async upsertEntity(partitionKey, rowKey, data) {
     try {
-      await this.ensureTableExists();
-      
       const entity = {
         partitionKey,
         rowKey,
         ...data,
         timestamp: new Date(),
       };
-      
+
       await this.tableClient.upsertEntity(entity);
       logger.debug(`Entity upserted: [${partitionKey}, ${rowKey}]`);
       return entity;
@@ -104,8 +104,6 @@ class TableStorageService {
    */
   async getEntity(partitionKey, rowKey) {
     try {
-      await this.ensureTableExists();
-      
       const entity = await this.tableClient.getEntity(partitionKey, rowKey);
       return entity;
     } catch (error) {
@@ -113,7 +111,7 @@ class TableStorageService {
         logger.debug(`Entity not found: [${partitionKey}, ${rowKey}]`);
         return null;
       }
-      
+
       logger.error(`Error getting entity [${partitionKey}, ${rowKey}]: ${error.message}`);
       throw error;
     }
@@ -126,17 +124,15 @@ class TableStorageService {
    */
   async queryEntities(query) {
     try {
-      await this.ensureTableExists();
-      
       const entities = [];
       const queryOptions = { filter: query };
-      
+
       const iterator = this.tableClient.listEntities(queryOptions);
-      
+
       for await (const entity of iterator) {
         entities.push(entity);
       }
-      
+
       return entities;
     } catch (error) {
       logger.error(`Error querying entities: ${error.message}`);
@@ -161,18 +157,33 @@ class TableStorageService {
   async hasPremiumSubscription(pubkey) {
     try {
       const subscription = await this.getEntity(pubkey, "subscription");
-      
+
       if (!subscription) {
         return false;
       }
-      
+
       const isPremium = subscription.isPremium === true;
       const isActive = subscription.expiryDate ? new Date(subscription.expiryDate) > new Date() : false;
-      
+
       return isPremium && isActive;
     } catch (error) {
       logger.error(`Error checking premium subscription for user ${pubkey}: ${error.message}`);
       return false; // Default to non-premium on error
+    }
+  }
+  /**
+   * Get all subscription entities for a user
+   * @param {string} pubkey - User's public key
+   * @returns {Promise<Array>} - Array of subscription entities
+   */
+  async getUserSubscriptions(pubkey) {
+    try {
+      const entities = await this.getUserEntities(pubkey);
+      // Filter to only include entities that have subscription data
+      return entities.filter(entity => entity.subscription);
+    } catch (error) {
+      logger.error(`Error getting user subscriptions for ${pubkey}: ${error.message}`);
+      return [];
     }
   }
 
@@ -185,11 +196,11 @@ class TableStorageService {
     try {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      
+
       const entities = await this.queryEntities(
         `PartitionKey eq '${pubkey}' and rowKey ge 'notification-${yesterday.toISOString()}'`
       );
-      
+
       return entities.filter(entity => entity.rowKey.startsWith('notification-')).length;
     } catch (error) {
       logger.error(`Error getting 24-hour notification count for user ${pubkey}: ${error.message}`);
@@ -206,7 +217,7 @@ class TableStorageService {
   async logNotification(pubkey, notification) {
     const timestamp = new Date().toISOString();
     const rowKey = `notification-${timestamp}`;
-    
+
     return this.upsertEntity(pubkey, rowKey, {
       content: notification.content,
       template: notification.template,
