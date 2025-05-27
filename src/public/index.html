@@ -160,11 +160,10 @@
     </style>
 </head>
 
-<body>
-    <header>
+<body>    <header>
         <div class="container">
-            <h1>Nostria Notification Service</h1>
-            <p>Reliable Web Push notifications for Nostr users</p>
+            <h1>Nostria Service</h1>
+            <p>Comprehensive Backend API for Nostr Applications</p>
         </div>
     </header>
 
@@ -172,9 +171,10 @@
         <div class="card">
             <h2>About the Service</h2>
             <p>
-                Nostria Notification Service provides reliable web push notifications for Nostr users.
-                The service utilizes the Web Push protocol and VAPID (Voluntary Application Server Identification)
-                to deliver secure, verifiable notifications to users across devices.
+                Nostria Service provides a comprehensive backend API infrastructure for Nostr applications.
+                It offers user management, subscription services, account operations, secure authentication,
+                and administrative tools. The service is designed to support Nostr clients with scalable,
+                reliable backend functionality using NIP-98 authentication for security.
             </p>
         </div>
 
@@ -182,29 +182,37 @@
             <h2>Features</h2>
             <div class="feature-grid">
                 <div class="feature">
-                    <div class="feature-icon">📲</div>
-                    <h3>Web Push Notifications</h3>
-                    <p>Receive real-time notifications across devices with the Web Push protocol.</p>
+                    <div class="feature-icon">👤</div>
+                    <h3>User Management</h3>
+                    <p>Complete user registration, profile management, and account operations for Nostr applications.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">🔒</div>
-                    <h3>VAPID Protocol</h3>
-                    <p>Verifiable and secure notifications with cryptographic verification.</p>
+                    <h3>NIP-98 Authentication</h3>
+                    <p>Secure authentication using Nostr signatures with NIP-98 HTTP authentication protocol.</p>
                 </div>
                 <div class="feature">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Premium Features</h3>
-                    <p>Enhanced notification limits and custom filtering options for premium users.</p>
+                    <div class="feature-icon">💳</div>
+                    <h3>Subscription Services</h3>
+                    <p>Tiered subscription management with free, premium, and premium+ plans for enhanced features.</p>
                 </div>
                 <div class="feature">
                     <div class="feature-icon">⚙️</div>
-                    <h3>Notification Settings</h3>
-                    <p>Control how and when you receive notifications with customizable settings.</p>
+                    <h3>Admin Tools</h3>
+                    <p>Comprehensive administrative interface for user management, analytics, and system monitoring.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📊</div>
+                    <h3>Health Monitoring</h3>
+                    <p>Real-time system health checks, performance monitoring, and comprehensive logging.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🔐</div>
+                    <h3>Rate Limiting</h3>
+                    <p>Tiered rate limiting for different endpoint types with configurable limits for security.</p>
                 </div>
             </div>
-        </div>
-
-        <div class="card">
+        </div>        <div class="card">
             <h2>API Endpoints</h2>
             <p>The following endpoints are available for developers:</p>
             <table class="api-endpoints">
@@ -216,6 +224,7 @@
                     </tr>
                 </thead>
                 <tbody>
+                    <!-- Public Endpoints -->
                     <tr>
                         <td><span class="method get">GET</span></td>
                         <td><span class="endpoint"><a href="/api/status">/api/status</a></span></td>
@@ -228,37 +237,76 @@
                     </tr>
                     <tr>
                         <td><span class="method get">GET</span></td>
-                        <td><span class="endpoint"><a href="/api/key">/api/key</a></span></td>
-                        <td>Get service public key (VAPID)</td>
-                    </tr>                    <tr>
+                        <td><span class="endpoint"><a href="/api/health">/api/health</a></span></td>
+                        <td>Comprehensive health monitoring and system status</td>
+                    </tr>
+                    
+                    <!-- User Registration & Signup -->
+                    <tr>
                         <td><span class="method post">POST</span></td>
-                        <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
-                        <td>Register a web push subscription for a user's device</td>
+                        <td><span class="endpoint">/api/signup/register</span></td>
+                        <td>Register a new user account</td>
                     </tr>
                     <tr>
                         <td><span class="method get">GET</span></td>
-                        <td><span class="endpoint">/api/subscription/devices/:pubkey</span></td>
-                        <td>Get all registered devices for a user</td>
+                        <td><span class="endpoint">/api/signup/profile/:pubkey</span></td>
+                        <td>Get user profile information</td>
+                    </tr>
+                    
+                    <!-- Account Management (Authenticated) -->
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/account/profile</span></td>
+                        <td>Get authenticated user's account profile</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method put">PUT</span></td>
+                        <td><span class="endpoint">/api/account/profile</span></td>
+                        <td>Update authenticated user's account profile</td>
+                    </tr>
+                    
+                    <!-- Subscription Management -->
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/subscription-management/pricing</span></td>
+                        <td>Get subscription pricing information</td>
                     </tr>
                     <tr>
                         <td><span class="method get">GET</span></td>
-                        <td><span class="endpoint">/api/subscription/settings/:pubkey</span></td>
-                        <td>Get a user's notification settings</td>
+                        <td><span class="endpoint">/api/subscription-management/status</span></td>
+                        <td>Get current subscription status (authenticated)</td>
                     </tr>
                     <tr>
                         <td><span class="method post">POST</span></td>
-                        <td><span class="endpoint">/api/subscription/settings/:pubkey</span></td>
-                        <td>Update a user's notification settings</td>
+                        <td><span class="endpoint">/api/subscription-management/upgrade</span></td>
+                        <td>Upgrade to premium subscription</td>
                     </tr>
                     <tr>
-                        <td><span class="method delete">DELETE</span></td>
-                        <td><span class="endpoint">/api/subscription/webpush/:pubkey/:deviceKey</span></td>
-                        <td>Delete a specific device subscription for a user</td>
+                        <td><span class="method post">POST</span></td>
+                        <td><span class="endpoint">/api/subscription-management/cancel</span></td>
+                        <td>Cancel current subscription</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method put">PUT</span></td>
+                        <td><span class="endpoint">/api/subscription-management/auto-renew</span></td>
+                        <td>Update auto-renewal settings</td>
+                    </tr>
+                    
+                    <!-- Admin Endpoints (Admin Only) -->
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/admin/users</span></td>
+                        <td>Get user management dashboard (admin only)</td>
+                    </tr>
+                    <tr>
+                        <td><span class="method get">GET</span></td>
+                        <td><span class="endpoint">/api/admin/analytics</span></td>
+                        <td>Get system analytics and metrics (admin only)</td>
                     </tr>
                 </tbody>
             </table>
             <p class="note">
-                <strong>Note:</strong> API endpoints require NIP-98 HTTP Authentication.
+                <strong>Note:</strong> Most API endpoints require NIP-98 HTTP Authentication. Admin endpoints require elevated privileges.
             </p>
         </div>
 
@@ -282,21 +330,20 @@
                 For more details on implementation, see the 
                 <a href="https://github.com/nostr-protocol/nips/blob/master/98.md" target="_blank">NIP-98 Specification</a>.
             </p>
-        </div>
-
-        <div class="card">
+        </div>        <div class="card">
             <h2>Getting Started</h2>
             <p>
-                To use the Nostria Notification Service, you need to:
+                To use the Nostria Service, you need to:
             </p>
             <ol>
-                <li>Register a Web Push subscription with your Nostr public key</li>
-                <li>Configure your notification preferences</li>
-                <li>Ensure your app or service integrates with the notification API</li>
+                <li>Register a user account using the signup API</li>
+                <li>Authenticate requests using NIP-98 HTTP Authentication with your Nostr keys</li>
+                <li>Configure your account profile and subscription preferences</li>
+                <li>Integrate with the API endpoints for your Nostr application needs</li>
             </ol>
             <p>
-                For developers who want to send notifications, you need to authenticate using the API key.
-                Please contact the service administrator for API access.
+                For developers who want to integrate with the service, ensure your application supports NIP-98 authentication.
+                Admin access is available for authorized users with elevated privileges.
             </p>
         </div>
     </div>

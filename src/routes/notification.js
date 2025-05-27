@@ -1,178 +1,264 @@
 const express = require('express');
 const router = express.Router();
-const tableStorage = require('../utils/tableStorage');
-const webPush = require('../utils/webPush');
-// const vasipProtocol = require('../utils/vapidProtocol');
+const { apiKeyAuth } = require('../middleware/auth');
+const { initializeTableClients } = require('../utils/enhancedTableStorage');
+const webpush = require('web-push');
 const logger = require('../utils/logger');
 
+// Configure VAPID details
+if (process.env.PUBLIC_VAPID_KEY && process.env.PRIVATE_VAPID_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@nostria.app',
+    process.env.PUBLIC_VAPID_KEY,
+    process.env.PRIVATE_VAPID_KEY
+  );
+} else {
+  logger.warn('VAPID keys not configured. Web push notifications will not work.');
+}
 
 /**
- * Send notification to users
- * @route POST /api/notification/send
- * Protected by API key
+ * Send a notification to a specific user
+ * @route POST /api/notification/send/:pubkey
  */
-router.post('/send', async (req, res) => {
+router.post('/send/:pubkey', apiKeyAuth, async (req, res) => {
   try {
-    const { pubkeys, template, args } = req.body;
-    
-    if (!pubkeys || !Array.isArray(pubkeys) || pubkeys.length === 0) {
-      return res.status(400).json({ error: 'Invalid pubkeys array' });
+    const { pubkey } = req.params;
+    const { title, body, icon, badge, tag, data } = req.body;
+
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Title and body are required' });
     }
+
+    const tableClients = await initializeTableClients();
     
-    if (!template) {
-      return res.status(400).json({ error: 'Template is required' });
+    // Get user's notification settings
+    const settingsEntity = await tableClients.accounts.getEntity(pubkey, 'notification-settings')
+      .catch(() => null);
+
+    const settings = settingsEntity ? {
+      enabled: settingsEntity.enabled ?? true,
+      eventTypes: JSON.parse(settingsEntity.eventTypes || '[]'),
+      frequency: settingsEntity.frequency || 'immediate'
+    } : { enabled: true, eventTypes: [], frequency: 'immediate' };
+
+    if (!settings.enabled) {
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Notifications disabled for user',
+        sent: 0 
+      });
     }
-    
-    // Process notifications for each pubkey
-    const results = {
-      success: [],
-      failed: [],
-      filtered: [],
-      limited: []
-    };
-    
-    for (const pubkey of pubkeys) {      try {        // Get all subscriptions for this user
-        const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+
+    // Get all user's web push subscriptions
+    const iterator = tableClients.accounts.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq '${pubkey}' and RowKey ge 'webpush-' and RowKey lt 'webpush.'`
+      }
+    });
+
+    const subscriptions = [];
+    for await (const entity of iterator) {
+      subscriptions.push({
+        endpoint: entity.endpoint,
+        keys: {
+          p256dh: entity.p256dh,
+          auth: entity.auth
+        },
+        deviceKey: entity.rowKey.replace('webpush-', '')
+      });
+    }
+
+    if (subscriptions.length === 0) {
+      return res.status(200).json({ 
+        success: true, 
+        message: 'No push subscriptions found for user',
+        sent: 0 
+      });
+    }
+
+    // Prepare notification payload
+    const payload = JSON.stringify({
+      title,
+      body,
+      icon: icon || '/favicon.ico',
+      badge: badge || '/favicon.ico',
+      tag: tag || 'nostria-notification',
+      data: data || {},
+      timestamp: Date.now()
+    });
+
+    // Send notifications to all user devices
+    const sendPromises = subscriptions.map(async (subscription) => {
+      try {
+        await webpush.sendNotification(subscription, payload);
+        logger.info(`Notification sent to device ${subscription.deviceKey} for pubkey ${pubkey.substring(0, 16)}...`);
+        return { success: true, deviceKey: subscription.deviceKey };
+      } catch (error) {
+        logger.error(`Failed to send notification to device ${subscription.deviceKey}:`, error);
         
-        if (!subscriptionEntities.length) {
-          results.failed.push({ pubkey, reason: 'No subscriptions found' });
-          continue;
-        }
-        
-        // Check if user can receive more notifications (tier limits)
-        const canReceive = await webPush.canReceiveNotification(pubkey);
-        if (!canReceive) {
-          results.limited.push({ pubkey, reason: 'Daily notification limit reached' });
-          continue;
-        }
-        
-        // Process the notification content
-        const content = webPush.processTemplate(template, args);
-        
-        // Create notification payload
-        const notification = {
-          title: 'Nostria Notification',
-          content,
-          template,
-          timestamp: new Date().toISOString()
-        };
-        
-        // Check if notification passes user's custom filters
-        const passesFilters = await webPush.passesCustomFilters(pubkey, notification);
-        if (!passesFilters) {
-          results.filtered.push({ pubkey, reason: 'Filtered by user settings' });
-          continue;
-        }
-        
-        // Sign the notification with VAPID
-        const signedNotification = await webpush.signNotification(pubkey, notification);
-        
-        let deviceSuccessCount = 0;
-        let deviceFailCount = 0;
-        
-        // Send notification to all user's devices
-        for (const subscriptionEntity of subscriptionEntities) {
+        // Remove invalid subscriptions
+        if (error.statusCode === 410 || error.statusCode === 404) {
           try {
-            // Parse subscription from string
-            const subscription = JSON.parse(subscriptionEntity.subscription);
-            
-            // Send Web Push notification
-            const pushResult = await webPush.sendNotification(subscription, signedNotification);
-            
-            if (pushResult && pushResult.error === 'expired_subscription') {
-              logger.warn(`Expired subscription for user ${pubkey}, device key: ${subscriptionEntity.rowKey.substring(0, 16)}...`);
-              deviceFailCount++;
-              // Could delete expired subscription here if desired
-            } else {
-              deviceSuccessCount++;
-            }
-          } catch (deviceError) {
-            logger.error(`Error sending notification to device ${subscriptionEntity.rowKey.substring(0, 16)}... for user ${pubkey}: ${deviceError.message}`);
-            deviceFailCount++;
+            await tableClients.accounts.deleteEntity(pubkey, `webpush-${subscription.deviceKey}`);
+            logger.info(`Removed invalid subscription for device ${subscription.deviceKey}`);
+          } catch (deleteError) {
+            logger.error('Error removing invalid subscription:', deleteError);
           }
         }
         
-        // Log the notification to file and database
-        await webPush.logNotificationToFile(pubkey, notification);
-        
-        if (deviceSuccessCount > 0) {
-          results.success.push({ 
-            pubkey, 
-            successCount: deviceSuccessCount,
-            failCount: deviceFailCount
-          });
-        } else {
-          results.failed.push({ 
-            pubkey, 
-            reason: 'All device notifications failed', 
-            deviceCount: deviceFailCount
-          });
-        }
-      } catch (error) {
-        logger.error(`Failed to send notification to ${pubkey}: ${error.message}`);
-        results.failed.push({ pubkey, reason: error.message });
+        return { success: false, deviceKey: subscription.deviceKey, error: error.message };
       }
-    }
-    
-    // Log summary
-    logger.info(`Notification sent to ${results.success.length} users, ` +
-      `failed for ${results.failed.length}, ` +
-      `filtered for ${results.filtered.length}, ` +
-      `limited for ${results.limited.length}`);
-    
-    res.status(200).json(results);
+    });
+
+    const results = await Promise.all(sendPromises);
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    // Log the notification
+    const notificationLog = {
+      partitionKey: pubkey,
+      rowKey: `notification-${Date.now()}`,
+      title,
+      body,
+      sentAt: new Date().toISOString(),
+      devicesTargeted: subscriptions.length,
+      devicesSuccessful: successful,
+      devicesFailed: failed
+    };
+
+    await tableClients.accounts.upsertEntity(notificationLog);
+
+    res.json({
+      success: true,
+      message: 'Notification processing completed',
+      sent: successful,
+      failed: failed,
+      total: subscriptions.length,
+      results: results
+    });
+
   } catch (error) {
-    logger.error(`Error sending notifications: ${error.message}`);
-    res.status(500).json({ error: 'Failed to process notifications' });
+    logger.error('Error sending notification:', error);
+    res.status(500).json({ error: 'Failed to send notification' });
   }
 });
 
 /**
- * Get notification status for a user
- * @route GET /api/notification/status/:pubkey
- * Protected by API key
+ * Send bulk notifications to multiple users
+ * @route POST /api/notification/bulk
  */
-router.get('/status/:pubkey', async (req, res) => {
+router.post('/bulk', apiKeyAuth, async (req, res) => {
+  try {
+    const { pubkeys, title, body, icon, badge, tag, data } = req.body;
+
+    if (!Array.isArray(pubkeys) || pubkeys.length === 0) {
+      return res.status(400).json({ error: 'pubkeys array is required' });
+    }
+
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Title and body are required' });
+    }
+
+    if (pubkeys.length > 100) {
+      return res.status(400).json({ error: 'Maximum 100 users per bulk notification' });
+    }
+
+    // Send notification to each user
+    const sendPromises = pubkeys.map(async (pubkey) => {
+      try {
+        const response = await fetch(`${req.protocol}://${req.get('host')}/api/notification/send/${pubkey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': req.headers.authorization
+          },
+          body: JSON.stringify({ title, body, icon, badge, tag, data })
+        });
+
+        const result = await response.json();
+        return { pubkey, success: response.ok, result };
+      } catch (error) {
+        logger.error(`Error in bulk notification for pubkey ${pubkey}:`, error);
+        return { pubkey, success: false, error: error.message };
+      }
+    });
+
+    const results = await Promise.all(sendPromises);
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      message: 'Bulk notification processing completed',
+      successful,
+      failed,
+      total: pubkeys.length,
+      results
+    });
+
+  } catch (error) {
+    logger.error('Error sending bulk notifications:', error);
+    res.status(500).json({ error: 'Failed to send bulk notifications' });
+  }
+});
+
+/**
+ * Get notification statistics for a user
+ * @route GET /api/notification/stats/:pubkey
+ */
+router.get('/stats/:pubkey', apiKeyAuth, async (req, res) => {
   try {
     const { pubkey } = req.params;
+    const { days = 7 } = req.query;
+
+    const tableClients = await initializeTableClients();
     
-    if (!pubkey) {
-      return res.status(400).json({ error: 'Invalid pubkey' });
-    }    // Check subscription status - get all user's devices
-    const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
-    const hasSubscription = subscriptionEntities.length > 0;
-    const deviceCount = subscriptionEntities.length;
-    
-    // Check premium status
-    const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
-    
-    // Get notification settings
-    const settings = await tableStorage.getEntity(pubkey, 'notification-settings');
-    
-    // Get 24-hour notification count
-    const notificationCount = await tableStorage.get24HourNotificationCount(pubkey);
-    
-    // Get daily limits based on tier
-    const dailyLimit = isPremium
-      ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || 50)
-      : parseInt(process.env.FREE_TIER_DAILY_LIMIT || 5);
-      const status = {
-      pubkey,
-      hasSubscription,
-      deviceCount,
-      isPremium,
-      settings: settings || { enabled: true },
-      notifications: {
-        count24h: notificationCount,
-        dailyLimit,
-        remaining: Math.max(0, dailyLimit - notificationCount)
+    // Calculate date range
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    // Query notification logs
+    const iterator = tableClients.accounts.listEntities({
+      queryOptions: {
+        filter: `PartitionKey eq '${pubkey}' and RowKey ge 'notification-${startDate.getTime()}' and RowKey lt 'notification-${endDate.getTime()}'`
       }
+    });
+
+    const notifications = [];
+    for await (const entity of iterator) {
+      notifications.push({
+        timestamp: entity.sentAt,
+        title: entity.title,
+        devicesTargeted: entity.devicesTargeted || 0,
+        devicesSuccessful: entity.devicesSuccessful || 0,
+        devicesFailed: entity.devicesFailed || 0
+      });
+    }
+
+    const stats = {
+      period: {
+        days: parseInt(days),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      },
+      total: {
+        notifications: notifications.length,
+        devicesTargeted: notifications.reduce((sum, n) => sum + n.devicesTargeted, 0),
+        devicesSuccessful: notifications.reduce((sum, n) => sum + n.devicesSuccessful, 0),
+        devicesFailed: notifications.reduce((sum, n) => sum + n.devicesFailed, 0)
+      },
+      recent: notifications.slice(0, 10)
     };
-    
-    res.status(200).json(status);
+
+    res.json({
+      success: true,
+      stats
+    });
+
   } catch (error) {
-    logger.error(`Error getting notification status: ${error.message}`);
-    res.status(500).json({ error: 'Failed to get notification status' });
+    logger.error('Error getting notification stats:', error);
+    res.status(500).json({ error: 'Failed to get notification statistics' });
   }
 });
 
