@@ -1,0 +1,32 @@
+{
+  "name": "nostria-service",
+  "version": "0.0.1",
+  "description": "Backend Service for Nostria",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "nostria",
+    "nostr"
+  ],
+  "author": "Nostria",
+  "license": "MIT",
+  "dependencies": {
+    "@azure/data-tables": "^13.3.0",
+    "@azure/identity": "^4.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "nostr-tools": "^2.13.0",
+    "uuid": "^11.1.0",
+    "web-push": "^3.6.7",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
