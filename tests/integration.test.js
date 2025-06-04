@@ -1,12 +1,25 @@
 const request = require('supertest');
 const app = require('../src/index');
-
+const sinon = require('sinon');
+const tableStorage = require('../src/utils/enhancedTableStorage');
 // Mock environment variables for testing
 process.env.NODE_ENV = 'test';
 process.env.SERVICE_API_KEY = 'test-api-key';
 process.env.ADMIN_PUBKEYS = 'npub1test1,npub1test2';
 
+
+
 describe('Public API Endpoints', () => {
+  let mockStorage;
+
+  beforeAll(async () => {
+    mockStorage = sinon.mock(tableStorage);
+  })
+
+  afterEach(async () => {
+    mockStorage.restore();
+  })
+
   describe('GET /api/status', () => {
     test('should return service status', async () => {
       const response = await request(app)
@@ -20,8 +33,20 @@ describe('Public API Endpoints', () => {
   });
 
   describe('GET /api/signup/check/:pubkey', () => {
+    test('should check if pubkey is not available', async () => {
+      const testPubkey = 'npub1test123456789';
+      const response = await request(app)
+        .get(`/api/signup/check/${testPubkey}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('available', false);
+      expect(response.body).toHaveProperty('pubkey', testPubkey);
+      expect(response.body).toHaveProperty('success', true);
+    });
+
     test('should check if pubkey is available', async () => {
       const testPubkey = 'npub1test123456789';
+      mockStorage.expects('getEntity').resolves({});
       const response = await request(app)
         .get(`/api/signup/check/${testPubkey}`)
         .expect(200);
