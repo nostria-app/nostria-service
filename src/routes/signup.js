@@ -116,7 +116,7 @@ router.get('/check/:pubkey', async (req, res) => {
     }
 
     const existingUser = await tableStorage.getEntity(pubkey, 'profile');
-    const isAvailable = !existingUser;
+    const isAvailable = !!existingUser;
 
     res.status(200).json({
       success: true,

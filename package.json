@@ -32,6 +32,7 @@
   "devDependencies": {
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
+    "sinon": "^20.0.0",
     "supertest": "^7.1.1"
   }
 }
