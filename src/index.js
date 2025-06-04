@@ -30,10 +30,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+const { accountsService } = require('./utils/AccountsTableService');
 
 // Import routes with error handling
-let subscriptionRoutes, notificationRoutes, statusRoutes, healthRoutes, keyRoutes;
+let subscriptionRoutes, notificationRoutes, statusRoutes, keyRoutes;
 let signupRoutes, adminRoutes, subscriptionManagementRoutes, accountRoutes;
 
 try {
@@ -41,7 +41,6 @@ try {
   subscriptionRoutes = require('./routes/subscription');
   notificationRoutes = require('./routes/notification');
   statusRoutes = require('./routes/status');
-  healthRoutes = require('./routes/health');
   keyRoutes = require('./routes/key');
   signupRoutes = require('./routes/signup');
   adminRoutes = require('./routes/admin');
@@ -132,26 +131,15 @@ async function validateStartupEnvironment() {
     }    // Test Azure Table Storage initialization
     try {
       logger.info('Testing Azure Table Storage connection...');
-      const { initializeTableClients } = require('./utils/enhancedTableStorage');
-      logger.info('Enhanced table storage module loaded successfully');
       
-      const tableClients = await initializeTableClients();
-      logger.info('Table clients initialization completed');
-      
-      const tableNames = Object.keys(tableClients);
-      logger.info(`Successfully initialized ${tableNames.length} table clients: ${tableNames.join(', ')}`);
-      
-      // Test a simple operation on the accounts table
-      if (tableClients.accounts) {
-        logger.info('Testing connection to accounts table...');
-        const testIterator = tableClients.accounts.listEntities({ 
-          queryOptions: { filter: "PartitionKey ne ''", top: 1 }
-        });
-        await testIterator.next();
-        logger.info('Azure Table Storage connection test successful');
-      } else {
-        logger.warn('Accounts table client not found in initialized clients');
-      }
+      // Test a simple operation on the accounts table      
+      logger.info('Testing connection to accounts table...');
+      const testIterator = accountsService.tableClient.listEntities({ 
+        queryOptions: { filter: "PartitionKey ne ''", top: 1 }
+      });
+      await testIterator.next();
+      logger.info('Azure Table Storage connection test successful');
+
     } catch (storageError) {
       errors.push(`Azure Table Storage initialization failed: ${storageError.message}`);
       logger.error('Azure Table Storage test failed:', storageError);
@@ -222,7 +210,6 @@ function initializeExpressApp() {
     app.use('/api/subscription', publicApiLimiter, subscriptionRoutes);
     app.use('/api/notification', authenticatedLimiter, notificationRoutes); // Protected route
     app.use('/api/status', publicApiLimiter, statusRoutes);
-    app.use('/api/health', publicApiLimiter, healthRoutes);
     app.use('/api/key', publicApiLimiter, keyRoutes);
     app.use('/api/signup', signupLimiter, signupRoutes); // Public signup route with strict limiting
     app.use('/api/admin', adminLimiter, adminRoutes); // Protected admin routes
