@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { initializeTableClients } = require('../utils/enhancedTableStorage');
+const { accountsService } = require('../utils/AccountsTableService');
+const { subscriptionsService } = require('../utils/SubscriptionsTableService');
+const { paymentsService } = require('../utils/PaymentsTableService');
 const logger = require('../utils/logger');
 
 // Health check endpoint
@@ -105,23 +107,25 @@ function checkMemoryUsage() {
 
 async function checkDatabaseConnection() {
   try {
-    // Try to initialize table clients to verify Azure connection
-    const tableClients = await initializeTableClients();
-    
-    // Simple check - try to list entities from accounts table (limit 1)
-    if (tableClients.accounts) {
-      const iterator = tableClients.accounts.listEntities({ 
-        queryOptions: { filter: "PartitionKey ne ''", top: 1 }
-      });
-      
-      // Just check if we can iterate (don't need to consume results)
-      await iterator.next();
-    }
+    // Try to list entities from accounts table (limit 1)
+    await accountsService.listEntities({ 
+      queryOptions: { filter: "PartitionKey ne ''", top: 1 }
+    });
+
+    // Try to list entities from subscriptions table (limit 1)
+    await subscriptionsService.listEntities({ 
+      queryOptions: { filter: "PartitionKey ne ''", top: 1 }
+    });
+
+    // Try to list entities from payments table (limit 1)
+    await paymentsService.listEntities({ 
+      queryOptions: { filter: "PartitionKey ne ''", top: 1 }
+    });
 
     return {
       status: 'OK',
       details: {
-        tablesInitialized: Object.keys(tableClients).length,
+        tablesInitialized: 3, // accounts, subscriptions, payments
         connectionType: process.env.AZURE_STORAGE_CONNECTION_STRING ? 'connectionString' : 'managedIdentity'
       }
     };

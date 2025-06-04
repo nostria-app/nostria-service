@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const tableStorage = require('../utils/enhancedTableStorage');
+const { subscriptionsService } = require('../utils/SubscriptionsTableService');
+const { paymentsService } = require('../utils/PaymentsTableService');
+const { userActivityService } = require('../utils/UserActivityTableService');
 const logger = require('../utils/logger');
 const { nip98Auth, extractTargetPubkey } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
@@ -98,11 +100,11 @@ router.get('/status', nip98Auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid or unauthorized access' });
     }
 
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(targetPubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(targetPubkey);
     
     // Get usage statistics
-    const notificationCount = await tableStorage.get24HourNotificationCount(targetPubkey);
-    const devices = await tableStorage.getUserSubscriptions(targetPubkey);
+    const notificationCount = await subscriptionsService.get24HourNotificationCount(targetPubkey);
+    const devices = await subscriptionsService.getUserSubscriptions(targetPubkey);
 
     const response = {
       subscription: subscriptionStatus,
@@ -181,7 +183,7 @@ router.post('/create-payment-intent', nip98Auth, async (req, res) => {
     };
 
     // Store the payment intent temporarily (in production, this would be handled by the payment processor)
-    await tableStorage.upsertEntity(pubkey, `payment-intent-${paymentIntentId}`, {
+    await paymentsService.upsertEntity(pubkey, `payment-intent-${paymentIntentId}`, {
       ...paymentIntent,
       expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutes
     });
@@ -213,7 +215,7 @@ router.post('/complete-payment', nip98Auth, async (req, res) => {
     }
 
     // Get the payment intent
-    const paymentIntent = await tableStorage.getEntity(pubkey, `payment-intent-${paymentIntentId}`);
+    const paymentIntent = await paymentsService.getEntity(pubkey, `payment-intent-${paymentIntentId}`);
     if (!paymentIntent) {
       return res.status(404).json({ error: 'Payment intent not found' });
     }
@@ -235,7 +237,7 @@ router.post('/complete-payment', nip98Auth, async (req, res) => {
       status: 'completed'
     };
 
-    await tableStorage.recordPayment(pubkey, paymentData);
+    await paymentsService.recordPayment(pubkey, paymentData);
 
     // Calculate subscription expiry date
     const startDate = new Date();
@@ -267,7 +269,7 @@ router.post('/complete-payment', nip98Auth, async (req, res) => {
         : parseInt(process.env.PREMIUM_PLUS_TIER_DAILY_LIMIT) || 500
     };
 
-    await tableStorage.upsertSubscription(pubkey, subscriptionData);
+    await subscriptionsService.upsertSubscription(pubkey, subscriptionData);
 
     // Clean up payment intent
     // Note: In Azure Table Storage, you'd typically set a TTL or clean up expired entities with a background job
@@ -308,8 +310,8 @@ router.post('/upgrade', nip98Auth, async (req, res) => {
     }
 
     // Get current subscription
-    const currentSubscription = await tableStorage.getCurrentSubscription(pubkey);
-    const currentStatus = await tableStorage.getSubscriptionStatus(pubkey);
+    const currentSubscription = await subscriptionsService.getCurrentSubscription(pubkey);
+    const currentStatus = await subscriptionsService.getSubscriptionStatus(pubkey);
 
     // Calculate pricing
     let price;
@@ -369,7 +371,7 @@ router.post('/upgrade', nip98Auth, async (req, res) => {
     };
 
     // Record the payment
-    await tableStorage.recordPayment(pubkey, paymentData);
+    await paymentsService.recordPayment(pubkey, paymentData);
 
     // Update subscription
     const newSubscription = {
@@ -387,7 +389,7 @@ router.post('/upgrade', nip98Auth, async (req, res) => {
         : parseInt(process.env.PREMIUM_PLUS_TIER_DAILY_LIMIT) || 500
     };
 
-    await tableStorage.upsertSubscription(pubkey, newSubscription);
+    await subscriptionsService.upsertSubscription(pubkey, newSubscription);
 
     logger.info(`Subscription upgraded for user ${pubkey.substring(0, 16)}... to ${tier} (${billingCycle})`);
 
@@ -416,7 +418,7 @@ router.post('/cancel', nip98Auth, async (req, res) => {
     const pubkey = req.authenticatedPubkey;
     const { immediate = false } = req.body;
 
-    const currentSubscription = await tableStorage.getCurrentSubscription(pubkey);
+    const currentSubscription = await subscriptionsService.getCurrentSubscription(pubkey);
     if (!currentSubscription) {
       return res.status(404).json({ error: 'No active subscription found' });
     }
@@ -437,7 +439,7 @@ router.post('/cancel', nip98Auth, async (req, res) => {
       cancelledSubscription.dailyNotificationLimit = parseInt(process.env.FREE_TIER_DAILY_LIMIT) || 5;
     }
 
-    await tableStorage.upsertSubscription(pubkey, cancelledSubscription);
+    await subscriptionsService.upsertSubscription(pubkey, cancelledSubscription);
 
     logger.info(`Subscription cancelled for user ${pubkey.substring(0, 16)}... (${immediate ? 'immediate' : 'end of period'})`);
 
@@ -464,7 +466,7 @@ router.get('/payments', nip98Auth, async (req, res) => {
     const pubkey = req.authenticatedPubkey;
     const limit = Math.min(parseInt(req.query.limit) || 25, 100);
 
-    const payments = await tableStorage.getPaymentHistory(pubkey, limit);
+    const payments = await paymentsService.getPaymentHistory(pubkey, limit);
 
     res.json({
       success: true,
@@ -503,7 +505,7 @@ router.put('/auto-renew', nip98Auth, async (req, res) => {
       return res.status(400).json({ error: 'Auto-renew must be a boolean value' });
     }
 
-    const currentSubscription = await tableStorage.getCurrentSubscription(targetPubkey);
+    const currentSubscription = await subscriptionsService.getCurrentSubscription(targetPubkey);
     if (!currentSubscription) {
       return res.status(404).json({ error: 'No subscription found' });
     }
@@ -519,7 +521,7 @@ router.put('/auto-renew', nip98Auth, async (req, res) => {
       autoRenewUpdatedAt: new Date().toISOString()
     };
 
-    await tableStorage.upsertSubscription(targetPubkey, updatedSubscription);
+    await subscriptionsService.upsertSubscription(targetPubkey, updatedSubscription);
 
     logger.info(`Auto-renew ${autoRenew ? 'enabled' : 'disabled'} for user ${targetPubkey.substring(0, 16)}...`);
 
@@ -548,7 +550,7 @@ router.use((req, res, next) => {
       const action = `Subscription ${req.method} ${req.path}`;
       
       // Async log user activity (don't wait for it)
-      tableStorage.logUserActivity(
+      userActivityService.logUserActivity(
         req.authenticatedPubkey,
         action,
         {

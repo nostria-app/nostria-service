@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const tableStorage = require('../utils/enhancedTableStorage');
+const { accountsService } = require('../utils/AccountsTableService');
+const { subscriptionsService } = require('../utils/SubscriptionsTableService');
+const { paymentsService } = require('../utils/PaymentsTableService');
+const { userActivityService } = require('../utils/UserActivityTableService');
 const logger = require('../utils/logger');
 const { nip98Auth, adminAuth, extractTargetPubkey } = require('../middleware/auth');
 
@@ -16,7 +19,7 @@ router.use((req, res, next) => {
       const action = `Account ${req.method} ${req.path}`;
       
       // Async log user activity (don't wait for it)
-      tableStorage.logUserActivity(
+      userActivityService.logUserActivity(
         req.authenticatedPubkey,
         action,
         {
@@ -58,16 +61,16 @@ router.get('/profile', async (req, res) => {
     const pubkey = req.authenticatedPubkey;
 
     // Get user profile
-    const profile = await tableStorage.getEntity(pubkey, 'profile');
+    const profile = await accountsService.getEntity(pubkey, 'profile');
     if (!profile) {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
     // Get subscription status
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(pubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(pubkey);
 
     // Get recent payment history (limited)
-    const paymentHistory = await tableStorage.getPaymentHistory(pubkey, 5);
+    const paymentHistory = await paymentsService.getPaymentHistory(pubkey, 5);
 
     const accountInfo = {
       pubkey: profile.pubkey,
@@ -102,7 +105,7 @@ router.put('/profile', async (req, res) => {
     const { email, metadata } = req.body;
 
     // Get existing profile
-    const existingProfile = await tableStorage.getEntity(pubkey, 'profile');
+    const existingProfile = await accountsService.getEntity(pubkey, 'profile');
     if (!existingProfile) {
       return res.status(404).json({ error: 'Profile not found' });
     }
@@ -115,7 +118,7 @@ router.put('/profile', async (req, res) => {
       lastUpdated: new Date().toISOString()
     };
 
-    await tableStorage.upsertEntity(pubkey, 'profile', updatedProfile);
+    await accountsService.upsertEntity(pubkey, 'profile', updatedProfile);
 
     logger.info(`Profile updated by user ${pubkey.substring(0, 16)}...`);
 
@@ -142,8 +145,8 @@ router.get('/subscription', async (req, res) => {
   try {
     const pubkey = req.authenticatedPubkey;
 
-    const subscription = await tableStorage.getCurrentSubscription(pubkey);
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(pubkey);
+    const subscription = await subscriptionsService.getCurrentSubscription(pubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(pubkey);
 
     if (!subscription) {
       return res.status(404).json({ error: 'No subscription found' });
@@ -172,7 +175,7 @@ router.get('/payments', async (req, res) => {
     const pubkey = req.authenticatedPubkey;
     const limit = parseInt(req.query.limit) || 25;
 
-    const payments = await tableStorage.getPaymentHistory(pubkey, Math.min(limit, 100));
+    const payments = await paymentsService.getPaymentHistory(pubkey, Math.min(limit, 100));
 
     res.json({
       success: true,
@@ -199,7 +202,7 @@ router.put('/subscription/preferences', async (req, res) => {
     const pubkey = req.authenticatedPubkey;
     const { autoRenew, billingCycle } = req.body;
 
-    const currentSubscription = await tableStorage.getCurrentSubscription(pubkey);
+    const currentSubscription = await subscriptionsService.getCurrentSubscription(pubkey);
     if (!currentSubscription) {
       return res.status(404).json({ error: 'No subscription found' });
     }
@@ -217,7 +220,7 @@ router.put('/subscription/preferences', async (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    await tableStorage.upsertSubscription(pubkey, updatedSubscription);
+    await subscriptionsService.upsertSubscription(pubkey, updatedSubscription);
 
     logger.info(`Subscription preferences updated by user ${pubkey.substring(0, 16)}...`);
 
@@ -245,13 +248,13 @@ router.get('/usage', async (req, res) => {
     const pubkey = req.authenticatedPubkey;
 
     // Get current subscription to check limits
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(pubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(pubkey);
     
     // Get 24-hour notification count
-    const count24h = await tableStorage.get24HourNotificationCount(pubkey);
+    const count24h = await subscriptionsService.get24HourNotificationCount(pubkey);
     
     // Get profile for total notifications
-    const profile = await tableStorage.getEntity(pubkey, 'profile');
+    const profile = await accountsService.getEntity(pubkey, 'profile');
 
     const usage = {
       current24Hours: count24h,
@@ -301,7 +304,7 @@ router.delete('/', async (req, res) => {
     // 4. Send confirmation email
     
     // For now, we'll just mark the profile as deleted
-    const profile = await tableStorage.getEntity(pubkey, 'profile');
+    const profile = await accountsService.getEntity(pubkey, 'profile');
     if (profile) {
       const deletedProfile = {
         ...profile,
@@ -311,11 +314,11 @@ router.delete('/', async (req, res) => {
         metadata: {} // Clear metadata
       };
       
-      await tableStorage.upsertEntity(pubkey, 'profile', deletedProfile);
+      await accountsService.upsertEntity(pubkey, 'profile', deletedProfile);
     }
 
     // Cancel subscription
-    const subscription = await tableStorage.getCurrentSubscription(pubkey);
+    const subscription = await subscriptionsService.getCurrentSubscription(pubkey);
     if (subscription) {
       const cancelledSubscription = {
         ...subscription,
@@ -324,7 +327,7 @@ router.delete('/', async (req, res) => {
         autoRenew: false
       };
       
-      await tableStorage.upsertSubscription(pubkey, cancelledSubscription);
+      await subscriptionsService.upsertSubscription(pubkey, cancelledSubscription);
     }
 
     logger.warn(`Account deletion requested by user ${pubkey.substring(0, 16)}...`);

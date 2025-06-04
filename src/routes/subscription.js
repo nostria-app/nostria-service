@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { nip98Auth, optionalNip98Auth } = require('../middleware/auth');
-const { initializeTableClients } = require('../utils/enhancedTableStorage');
-const { logUserActivity } = require('../utils/enhancedTableStorage');
+const { accountsService } = require('../utils/AccountsTableService');
+const { userActivityService } = require('../utils/UserActivityTableService');
 const logger = require('../utils/logger');
 
 /**
@@ -26,7 +26,6 @@ router.post('/webpush/:pubkey', nip98Auth, async (req, res) => {
       });
     }
 
-    const tableClients = await initializeTableClients();
     const timestamp = new Date().toISOString();
     const deviceKey = Buffer.from(endpoint).toString('base64').substring(0, 16);
 
@@ -42,13 +41,18 @@ router.post('/webpush/:pubkey', nip98Auth, async (req, res) => {
       lastUsed: timestamp
     };
 
-    await tableClients.accounts.upsertEntity(subscriptionEntity);
+    await accountsService.upsertEntity(subscriptionEntity);
 
     // Log activity
-    await logUserActivity(pubkey, 'webpush_subscription_registered', {
-      deviceKey,
-      deviceName: deviceName || 'Unknown Device'
-    }, req.ip);
+    await userActivityService.logUserActivity(
+      pubkey,
+      'webpush_subscription_registered',
+      {
+        deviceKey,
+        deviceName: deviceName || 'Unknown Device'
+      },
+      req.ip
+    );
 
     logger.info(`Web push subscription registered for pubkey: ${pubkey.substring(0, 16)}...`);
 
@@ -76,25 +80,20 @@ router.get('/devices/:pubkey', nip98Auth, async (req, res) => {
     if (req.authenticatedPubkey !== pubkey) {
       return res.status(403).json({ error: 'Unauthorized: Cannot view devices for another user' });
     }
-
-    const tableClients = await initializeTableClients();
     
     // Query all webpush subscriptions for this user
-    const iterator = tableClients.accounts.listEntities({
+    const subscriptions = await accountsService.listEntities({
       queryOptions: {
         filter: `PartitionKey eq '${pubkey}' and RowKey ge 'webpush-' and RowKey lt 'webpush.'`
       }
     });
 
-    const devices = [];
-    for await (const entity of iterator) {
-      devices.push({
-        deviceKey: entity.rowKey.replace('webpush-', ''),
-        deviceName: entity.deviceName,
-        registeredAt: entity.registeredAt,
-        lastUsed: entity.lastUsed
-      });
-    }
+    const devices = subscriptions.map(entity => ({
+      deviceKey: entity.rowKey.replace('webpush-', ''),
+      deviceName: entity.deviceName,
+      registeredAt: entity.registeredAt,
+      lastUsed: entity.lastUsed
+    }));
 
     res.json({
       success: true,
@@ -120,11 +119,9 @@ router.get('/settings/:pubkey', nip98Auth, async (req, res) => {
     if (req.authenticatedPubkey !== pubkey) {
       return res.status(403).json({ error: 'Unauthorized: Cannot view settings for another user' });
     }
-
-    const tableClients = await initializeTableClients();
     
     // Get notification settings
-    const settingsEntity = await tableClients.accounts.getEntity(pubkey, 'notification-settings')
+    const settingsEntity = await accountsService.getEntity(pubkey, 'notification-settings')
       .catch(() => null);
 
     const defaultSettings = {
@@ -169,8 +166,6 @@ router.post('/settings/:pubkey', nip98Auth, async (req, res) => {
     if (req.authenticatedPubkey !== pubkey) {
       return res.status(403).json({ error: 'Unauthorized: Cannot update settings for another user' });
     }
-
-    const tableClients = await initializeTableClients();
     
     // Validate settings
     const validEventTypes = ['mention', 'reaction', 'repost', 'follow', 'dm'];
@@ -203,14 +198,19 @@ router.post('/settings/:pubkey', nip98Auth, async (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    await tableClients.accounts.upsertEntity(settingsEntity);
+    await accountsService.upsertEntity(settingsEntity);
 
     // Log activity
-    await logUserActivity(pubkey, 'notification_settings_updated', {
-      enabled,
-      eventTypes,
-      frequency
-    }, req.ip);
+    await userActivityService.logUserActivity(
+      pubkey,
+      'notification_settings_updated',
+      {
+        enabled,
+        eventTypes,
+        frequency
+      },
+      req.ip
+    );
 
     logger.info(`Notification settings updated for pubkey: ${pubkey.substring(0, 16)}...`);
 
@@ -237,16 +237,19 @@ router.delete('/webpush/:pubkey/:deviceKey', nip98Auth, async (req, res) => {
     if (req.authenticatedPubkey !== pubkey) {
       return res.status(403).json({ error: 'Unauthorized: Cannot delete subscription for another user' });
     }
-
-    const tableClients = await initializeTableClients();
     
     // Delete the subscription
-    await tableClients.accounts.deleteEntity(pubkey, `webpush-${deviceKey}`);
+    await accountsService.deleteEntity(pubkey, `webpush-${deviceKey}`);
 
     // Log activity
-    await logUserActivity(pubkey, 'webpush_subscription_deleted', {
-      deviceKey
-    }, req.ip);
+    await userActivityService.logUserActivity(
+      pubkey,
+      'webpush_subscription_deleted',
+      {
+        deviceKey
+      },
+      req.ip
+    );
 
     logger.info(`Web push subscription deleted for pubkey: ${pubkey.substring(0, 16)}... device: ${deviceKey}`);
 

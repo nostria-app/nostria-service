@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const tableStorage = require('../utils/enhancedTableStorage');
+const { accountsService } = require('../utils/AccountsTableService');
+const { subscriptionsService } = require('../utils/SubscriptionsTableService');
 const logger = require('../utils/logger');
 const { v4: uuidv4 } = require('uuid');
 
@@ -17,7 +18,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = await tableStorage.getEntity(pubkey, 'profile');
+    const existingUser = await accountsService.getEntity(pubkey, 'profile');
     if (existingUser) {
       return res.status(409).json({ error: 'User already exists' });
     }
@@ -32,7 +33,7 @@ router.post('/', async (req, res) => {
       tier: 'free'
     };
 
-    await tableStorage.upsertEntity(pubkey, 'profile', userProfile);
+    await accountsService.upsertEntity(pubkey, 'profile', userProfile);
 
     // Initialize free subscription
     const freeSubscription = {
@@ -45,7 +46,7 @@ router.post('/', async (req, res) => {
       dailyNotificationLimit: parseInt(process.env.FREE_TIER_DAILY_LIMIT) || 5
     };
 
-    await tableStorage.upsertSubscription(pubkey, freeSubscription);
+    await subscriptionsService.upsertSubscription(pubkey, freeSubscription);
 
     logger.info(`New user signup: ${pubkey.substring(0, 16)}... with email: ${email || 'none'}`);
 
@@ -77,13 +78,13 @@ router.get('/profile/:pubkey', async (req, res) => {
     }
 
     // Get user profile
-    const profile = await tableStorage.getEntity(targetPubkey, 'profile');
+    const profile = await accountsService.getEntity(targetPubkey, 'profile');
     if (!profile) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Get subscription status
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(targetPubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(targetPubkey);
 
     // Public profile information
     const publicProfile = {
@@ -115,8 +116,8 @@ router.get('/check/:pubkey', async (req, res) => {
       return res.status(400).json({ error: 'Public key is required' });
     }
 
-    const existingUser = await tableStorage.getEntity(pubkey, 'profile');
-    const isAvailable = !!existingUser;
+    const existingUser = await accountsService.getEntity(pubkey, 'profile');
+    const isAvailable = !existingUser;
 
     res.status(200).json({
       success: true,

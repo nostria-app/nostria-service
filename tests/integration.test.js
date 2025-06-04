@@ -1,24 +1,24 @@
 const request = require('supertest');
+jest.mock('../src/utils/BaseTableStorageService');
+
 const app = require('../src/index');
-const sinon = require('sinon');
-const tableStorage = require('../src/utils/enhancedTableStorage');
+const { accountsService } = require('../src/utils/AccountsTableService');
+const { subscriptionsService } = require('../src/utils/SubscriptionsTableService');
+
 // Mock environment variables for testing
 process.env.NODE_ENV = 'test';
 process.env.SERVICE_API_KEY = 'test-api-key';
 process.env.ADMIN_PUBKEYS = 'npub1test1,npub1test2';
 
-
-
 describe('Public API Endpoints', () => {
-  let mockStorage;
-
-  beforeAll(async () => {
-    mockStorage = sinon.mock(tableStorage);
-  })
-
-  afterEach(async () => {
-    mockStorage.restore();
-  })
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.resetAllMocks();
+    
+    // Mock the services
+    jest.spyOn(accountsService, 'getEntity').mockResolvedValue(null);
+    jest.spyOn(subscriptionsService, 'getCurrentSubscription').mockResolvedValue(null);
+  });
 
   describe('GET /api/status', () => {
     test('should return service status', async () => {
@@ -35,6 +35,7 @@ describe('Public API Endpoints', () => {
   describe('GET /api/signup/check/:pubkey', () => {
     test('should check if pubkey is not available', async () => {
       const testPubkey = 'npub1test123456789';
+      accountsService.getEntity.mockResolvedValueOnce({});
       const response = await request(app)
         .get(`/api/signup/check/${testPubkey}`)
         .expect(200);
@@ -46,7 +47,6 @@ describe('Public API Endpoints', () => {
 
     test('should check if pubkey is available', async () => {
       const testPubkey = 'npub1test123456789';
-      mockStorage.expects('getEntity').resolves({});
       const response = await request(app)
         .get(`/api/signup/check/${testPubkey}`)
         .expect(200);
@@ -54,6 +54,7 @@ describe('Public API Endpoints', () => {
       expect(response.body).toHaveProperty('available', true);
       expect(response.body).toHaveProperty('pubkey', testPubkey);
       expect(response.body).toHaveProperty('success', true);
+      expect(accountsService.getEntity).toHaveBeenCalledWith(testPubkey, 'profile');
     });
 
     test('should return 400 for invalid pubkey format', async () => {
@@ -61,7 +62,7 @@ describe('Public API Endpoints', () => {
         .get('/api/signup/check/invalid-pubkey')
         .expect(200); // The endpoint doesn't validate format, just checks existence
 
-      expect(response.body).toHaveProperty('available', false);
+      expect(response.body).toHaveProperty('available', true);
       expect(response.body).toHaveProperty('success', true);
     });
   });

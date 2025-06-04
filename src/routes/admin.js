@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const tableStorage = require('../utils/enhancedTableStorage');
+const { accountsService } = require('../utils/AccountsTableService');
+const { subscriptionsService } = require('../utils/SubscriptionsTableService');
+const { paymentsService } = require('../utils/PaymentsTableService');
+const { adminAuditService } = require('../utils/AdminAuditTableService');
+const { userActivityService } = require('../utils/UserActivityTableService');
+const { subscriptionHistoryService } = require('../utils/SubscriptionHistoryTableService');
 const logger = require('../utils/logger');
 const { nip98Auth, adminAuth, extractTargetPubkey } = require('../middleware/auth');
 
@@ -28,7 +33,7 @@ router.use((req, res, next) => {
       const targetPubkey = extractTargetPubkey(req);
       
       // Async log (don't wait for it)
-      tableStorage.logAdminAction(
+      adminAuditService.logAdminAction(
         req.authenticatedPubkey,
         action,
         details,
@@ -61,7 +66,7 @@ router.get('/users', async (req, res) => {
       query = `PartitionKey ge '${search}' and PartitionKey lt '${search}z'`;
     }
 
-    const allEntities = await tableStorage.queryEntities(query);
+    const allEntities = await accountsService.queryEntities(query);
     
     // Filter to only profile entities and paginate
     const profiles = allEntities
@@ -71,7 +76,7 @@ router.get('/users', async (req, res) => {
     // Enrich with subscription data
     const enrichedProfiles = await Promise.all(
       profiles.map(async (profile) => {
-        const subscriptionStatus = await tableStorage.getSubscriptionStatus(profile.partitionKey);
+        const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(profile.partitionKey);
         return {
           pubkey: profile.partitionKey,
           email: profile.email,
@@ -108,22 +113,22 @@ router.get('/users/:pubkey', async (req, res) => {
     const { pubkey } = req.params;
 
     // Get user profile
-    const profile = await tableStorage.getEntity(pubkey, 'profile');
+    const profile = await accountsService.getEntity(pubkey, 'profile');
     if (!profile) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Get subscription status
-    const subscriptionStatus = await tableStorage.getSubscriptionStatus(pubkey);
+    const subscriptionStatus = await subscriptionsService.getSubscriptionStatus(pubkey);
     
     // Get payment history
-    const paymentHistory = await tableStorage.getPaymentHistory(pubkey, 10);
+    const paymentHistory = await paymentsService.getPaymentHistory(pubkey, 10);
     
     // Get notification count for last 24 hours
-    const notificationCount = await tableStorage.get24HourNotificationCount(pubkey);
+    const notificationCount = await subscriptionsService.get24HourNotificationCount(pubkey);
     
     // Get user's devices
-    const devices = await tableStorage.getUserSubscriptions(pubkey);
+    const devices = await subscriptionsService.getUserSubscriptions(pubkey);
 
     const userDetails = {
       profile: {
@@ -174,7 +179,7 @@ router.put('/users/:pubkey/subscription', async (req, res) => {
     }
 
     // Get current subscription
-    const currentSubscription = await tableStorage.getCurrentSubscription(pubkey);
+    const currentSubscription = await subscriptionsService.getCurrentSubscription(pubkey);
     if (!currentSubscription) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -203,7 +208,7 @@ router.put('/users/:pubkey/subscription', async (req, res) => {
       adminUpdate: true
     };
 
-    await tableStorage.upsertSubscription(pubkey, updatedSubscription);
+    await subscriptionsService.upsertSubscription(pubkey, updatedSubscription);
 
     logger.info(`Admin ${req.authenticatedPubkey.substring(0, 16)}... updated subscription for user ${pubkey.substring(0, 16)}... to ${tier}`);
 
@@ -244,7 +249,7 @@ router.post('/users/:pubkey/payments', async (req, res) => {
       adminRecorded: true
     };
 
-    const payment = await tableStorage.recordPayment(pubkey, paymentData);
+    const payment = await paymentsService.recordPayment(pubkey, paymentData);
 
     logger.info(`Admin ${req.authenticatedPubkey.substring(0, 16)}... recorded payment for user ${pubkey.substring(0, 16)}... - ${amount} ${currency}`);
 
@@ -273,7 +278,7 @@ router.put('/users/:pubkey/status', async (req, res) => {
     }
 
     // Get current profile
-    const profile = await tableStorage.getEntity(pubkey, 'profile');
+    const profile = await accountsService.getEntity(pubkey, 'profile');
     if (!profile) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -287,7 +292,7 @@ router.put('/users/:pubkey/status', async (req, res) => {
       statusUpdatedBy: req.authenticatedPubkey
     };
 
-    await tableStorage.upsertEntity(pubkey, 'profile', updatedProfile);
+    await accountsService.upsertEntity(pubkey, 'profile', updatedProfile);
 
     logger.info(`Admin ${req.authenticatedPubkey.substring(0, 16)}... updated status for user ${pubkey.substring(0, 16)}... to ${status}`);
 
@@ -316,7 +321,7 @@ router.get('/audit', async (req, res) => {
     const adminPubkey = req.query.admin; // Optional filter by specific admin
     const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Max 500 logs
 
-    const auditLogs = await tableStorage.getAdminAuditLogs(adminPubkey, limit);
+    const auditLogs = await adminAuditService.getAdminAuditLogs(adminPubkey, limit);
 
     res.status(200).json({
       success: true,
@@ -367,8 +372,8 @@ router.get('/users/:pubkey/activity', async (req, res) => {
       return res.status(400).json({ error: 'Public key is required' });
     }
 
-    const activities = await tableStorage.getUserActivity(pubkey, limit, activityType);
-    const analytics = await tableStorage.getUserActivityAnalytics(pubkey, 30);
+    const activities = await userActivityService.getUserActivity(pubkey, limit, activityType);
+    const analytics = await userActivityService.getUserActivityAnalytics(pubkey, 30);
 
     res.json({
       success: true,
@@ -396,7 +401,7 @@ router.get('/users/:pubkey/subscription-history', async (req, res) => {
       return res.status(400).json({ error: 'Public key is required' });
     }
 
-    const history = await tableStorage.getSubscriptionHistory(pubkey, limit);
+    const history = await subscriptionHistoryService.getSubscriptionHistory(pubkey, limit);
 
     res.json({
       success: true,
@@ -462,7 +467,7 @@ router.put('/users/:pubkey/subscription', async (req, res) => {
       adminReason: reason || 'Manual admin adjustment'
     };
 
-    const updatedSubscription = await tableStorage.upsertSubscriptionWithHistory(
+    const updatedSubscription = await subscriptionsService.upsertSubscriptionWithHistory(
       pubkey, 
       subscriptionData, 
       `Admin adjustment: ${reason || 'Manual change'}`
@@ -495,7 +500,7 @@ router.get('/users/:pubkey/payments', async (req, res) => {
       return res.status(400).json({ error: 'Public key is required' });
     }
 
-    const payments = await tableStorage.getPaymentHistory(pubkey, limit);
+    const payments = await paymentsService.getPaymentHistory(pubkey, limit);
 
     res.json({
       success: true,
@@ -584,7 +589,7 @@ router.post('/users/:pubkey/refund', async (req, res) => {
       isRefund: true
     };
 
-    await tableStorage.recordPayment(pubkey, refundData);
+    await paymentsService.recordPayment(pubkey, refundData);
 
     logger.info(`Admin ${req.authenticatedPubkey.substring(0, 16)}... issued refund of ${amount} cents to ${pubkey.substring(0, 16)}... for: ${reason}`);
 
