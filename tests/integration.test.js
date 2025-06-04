@@ -26,7 +26,7 @@ describe('Public API Endpoints', () => {
         .get(`/api/signup/check/${testPubkey}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('available');
+      expect(response.body).toHaveProperty('available', true);
       expect(response.body).toHaveProperty('pubkey', testPubkey);
       expect(response.body).toHaveProperty('success', true);
     });
@@ -36,7 +36,7 @@ describe('Public API Endpoints', () => {
         .get('/api/signup/check/invalid-pubkey')
         .expect(200); // The endpoint doesn't validate format, just checks existence
 
-      expect(response.body).toHaveProperty('available');
+      expect(response.body).toHaveProperty('available', false);
       expect(response.body).toHaveProperty('success', true);
     });
   });
