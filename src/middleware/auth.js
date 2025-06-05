@@ -20,11 +20,28 @@ const apiKeyAuth = (req, res, next) => {
  * Validates the authorization header and extracts the pubkey
  */
 const nip98Auth = async (req, res, next) => {
+  if (!req.authMethod) {
+    await decodeNIP98Header(req, res)
+  }
+    // Add the authenticated pubkey to the request object
+    if (!req.authenticatedPubkey || req.authMethod !== 'nip98') {
+      return res.status(401).json({ error: 'NIP98 Authorization header required' });
+    }
+    next()
+}
+
+/**
+ * If "Authoriation" header is present, tries to decoded it as NIP98. Otherwise,
+ * sets req#authMethod to 'none' and moves on.
+ */
+const decodeNIP98Header = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
-      return res.status(401).json({ error: 'Missing authorization header' });
+      req.authMethod = 'none'
+      next();
+      return;
     }
 
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
@@ -56,7 +73,7 @@ const nip98Auth = async (req, res, next) => {
     req.authMethod = 'nip98';
     
     logger.debug(`NIP-98 authentication successful for pubkey: ${pubkey.substring(0, 16)}...`);
-    next();
+    next?.();
   } catch (error) {
     logger.error(`NIP-98 authentication error: ${error.message}`);
     res.status(500).json({ error: 'Authentication service error' });
@@ -157,6 +174,8 @@ const extractTargetPubkey = (req) => {
 module.exports = {
   apiKeyAuth,
   nip98Auth,
+  nip98Auth,
+  decodeNIP98Header,
   adminAuth,
   optionalNip98Auth,
   extractTargetPubkey
