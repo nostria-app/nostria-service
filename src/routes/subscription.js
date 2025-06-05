@@ -267,4 +267,71 @@ router.delete('/webpush/:pubkey/:deviceKey', nip98Auth, async (req, res) => {
   }
 });
 
+/**
+ * Get subscription tiers and pricing (public endpoint)
+ * @route GET /api/subscription/pricing
+ */
+router.get('/pricing', (req, res) => {
+  try {
+    const pricing = {
+      free: {
+        tier: 'free',
+        price: 0,
+        dailyLimit: parseInt(process.env.FREE_TIER_DAILY_LIMIT) || 5,
+        features: ['Basic notifications', 'Email support']
+      },
+      premium: {
+        tier: 'premium',
+        dailyLimit: parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT) || 50,
+        features: ['Increased notification limit', 'Priority support', 'Custom templates'],
+        pricing: {
+          monthly: {
+            price: parseInt(process.env.PREMIUM_MONTHLY_PRICE) || 999,
+            priceDisplay: '$9.99/month'
+          },
+          quarterly: {
+            price: parseInt(process.env.PREMIUM_QUARTERLY_PRICE) || 2497,
+            priceDisplay: '$24.97/quarter',
+            savings: 'Save 17%'
+          },
+          yearly: {
+            price: parseInt(process.env.PREMIUM_YEARLY_PRICE) || 9999,
+            priceDisplay: '$99.99/year',
+            savings: 'Save 17%'
+          }
+        }
+      },
+      premium_plus: {
+        tier: 'premium_plus',
+        dailyLimit: parseInt(process.env.PREMIUM_PLUS_TIER_DAILY_LIMIT) || 500,
+        features: ['Unlimited notifications', 'Premium support', 'Custom integrations', 'Analytics'],
+        pricing: {
+          monthly: {
+            price: parseInt(process.env.PREMIUM_PLUS_MONTHLY_PRICE) || 1999,
+            priceDisplay: '$19.99/month'
+          },
+          quarterly: {
+            price: parseInt(process.env.PREMIUM_PLUS_QUARTERLY_PRICE) || 4997,
+            priceDisplay: '$49.97/quarter',
+            savings: 'Save 17%'
+          },
+          yearly: {
+            price: parseInt(process.env.PREMIUM_PLUS_YEARLY_PRICE) || 19999,
+            priceDisplay: '$199.99/year',
+            savings: 'Save 17%'
+          }
+        }
+      }
+    };
+
+    res.json({
+      success: true,
+      pricing
+    });
+  } catch (error) {
+    logger.error(`Pricing endpoint error: ${error.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
