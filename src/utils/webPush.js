@@ -109,7 +109,7 @@ class WebPushService {
     });
     
     // Also log to database
-    await tableStorage.logNotification(pubkey, notification);
+    // await tableStorage.logNotification(pubkey, notification);
   }
 
   /**

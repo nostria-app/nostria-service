@@ -103,7 +103,7 @@ router.post('/webpush/:pubkey', async (req, res) => {
           "icon": "https://nostria.app/icons/icon-128x128.png",
           "data": {
             "onActionClick": {
-              "default": { "operation": "navigateLastFocusedOrOpen", "url": "/" }
+              "default": { "operation": "navigateLastFocusedOrOpen", "url": "/?pubkey=" + pubkey }
             }
           }
         }
@@ -210,8 +210,12 @@ router.get('/devices/:pubkey', async (req, res) => {
     if (!pubkey) {
       return res.status(400).json({ error: 'Invalid pubkey' });
     }
+
     // Get all user subscription entities
     const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+
+    console.log('Pubkey:', pubkey);
+    console.log('SUBSCRIPTION ENTITIES:', subscriptionEntities);
 
     // Extract relevant info from subscription entities
     const devices = subscriptionEntities

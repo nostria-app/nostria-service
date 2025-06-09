@@ -106,11 +106,11 @@ router.post('/send', async (req, res) => {
               icon: notificationPayload.icon,
               data: notificationPayload.url ? {
                 onActionClick: {
-                  default: { operation: "navigateLastFocusedOrOpen", url: notificationPayload.url }
+                  default: { operation: "navigateLastFocusedOrOpen", url: notificationPayload.url + "?pubkey=" + pubkey }
                 }
               } : {
                 onActionClick: {
-                  default: { operation: "navigateLastFocusedOrOpen", url: "/" }
+                  default: { operation: "navigateLastFocusedOrOpen", url: "/?pubkey=" + pubkey }
                 }
               }
             }

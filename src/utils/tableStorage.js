@@ -117,9 +117,7 @@ class TableStorageService {
       logger.error(`Error getting entity [${partitionKey}, ${rowKey}]: ${error.message}`);
       throw error;
     }
-  }
-
-  /**
+  }  /**
    * Query entities from the table
    * @param {string} query - OData filter query
    * @returns {Promise<Array>} - Array of entities
@@ -127,17 +125,24 @@ class TableStorageService {
   async queryEntities(query) {
     try {
       const entities = [];
-      const queryOptions = { filter: query };
+      const queryOptions = { 
+        queryOptions: { 
+          filter: query 
+        } 
+      };
 
+      logger.debug(`Executing query: ${query}`);
+      
       const iterator = this.tableClient.listEntities(queryOptions);
 
       for await (const entity of iterator) {
         entities.push(entity);
       }
 
+      logger.debug(`Query returned ${entities.length} entities`);
       return entities;
     } catch (error) {
-      logger.error(`Error querying entities: ${error.message}`);
+      logger.error(`Error querying entities with query "${query}": ${error.message}`);
       throw error;
     }
   }
@@ -155,15 +160,41 @@ class TableStorageService {
       logger.error(`Error getting all user pubkeys: ${error.message}`);
       throw error;
     }
-  }
-
-  /**
+  }  /**
    * Get all entities for a specific user (partition)
    * @param {string} partitionKey - User's pubkey
    * @returns {Promise<Array>} - Array of entities
    */
   async getUserEntities(partitionKey) {
-    return this.queryEntities(`PartitionKey eq '${partitionKey}'`);
+    try {
+      const entities = [];
+      
+      // Use the listEntities method with specific partition key filtering
+      const queryOptions = {
+        queryOptions: {
+          filter: odata`PartitionKey eq ${partitionKey}`
+        }
+      };
+
+      logger.debug(`Querying entities for partition key: ${partitionKey}`);
+      
+      const iterator = this.tableClient.listEntities(queryOptions);
+
+      for await (const entity of iterator) {
+        // Double-check that the partition key matches (security measure)
+        if (entity.partitionKey === partitionKey) {
+          entities.push(entity);
+        } else {
+          logger.warn(`Security warning: Entity with wrong partition key returned! Expected: ${partitionKey}, Got: ${entity.partitionKey}`);
+        }
+      }
+
+      logger.debug(`Found ${entities.length} entities for partition key: ${partitionKey}`);
+      return entities;
+    } catch (error) {
+      logger.error(`Error getting user entities for partition key ${partitionKey}: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -187,23 +218,37 @@ class TableStorageService {
       logger.error(`Error checking premium subscription for user ${pubkey}: ${error.message}`);
       return false; // Default to non-premium on error
     }
-  }
-  /**
+  }  /**
    * Get all subscription entities for a user
    * @param {string} pubkey - User's public key
    * @returns {Promise<Array>} - Array of subscription entities
    */
   async getUserSubscriptions(pubkey) {
     try {
+      logger.debug(`Getting subscriptions for pubkey: ${pubkey}`);
+      
       const entities = await this.getUserEntities(pubkey);
+      
       // Filter to only include entities that have subscription data
-      return entities.filter(entity => entity.subscription);
+      const subscriptionEntities = entities.filter(entity => {
+        if (entity.subscription) {
+          // Additional security check - ensure partition key matches
+          if (entity.partitionKey !== pubkey) {
+            logger.error(`SECURITY ALERT: Subscription entity with mismatched partition key! Expected: ${pubkey}, Got: ${entity.partitionKey}`);
+            return false;
+          }
+          return true;
+        }
+        return false;
+      });
+      
+      logger.debug(`Found ${subscriptionEntities.length} subscription entities for pubkey: ${pubkey}`);
+      return subscriptionEntities;
     } catch (error) {
       logger.error(`Error getting user subscriptions for ${pubkey}: ${error.message}`);
       return [];
     }
   }
-
   /**
    * Get notification count for user within the past 24 hours
    * @param {string} pubkey - User's pubkey
@@ -213,9 +258,11 @@ class TableStorageService {
     try {
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayIso = yesterday.toISOString();
 
+      // Use odata helper to properly escape values and prevent OData injection
       const entities = await this.queryEntities(
-        `PartitionKey eq '${pubkey}' and rowKey ge 'notification-${yesterday.toISOString()}'`
+        odata`PartitionKey eq ${pubkey} and rowKey ge ${'notification-' + yesterdayIso}`
       );
 
       return entities.filter(entity => entity.rowKey.startsWith('notification-')).length;
@@ -257,7 +304,7 @@ class TableStorageService {
         created: new Date().toISOString(),
       };
 
-      console.log('SAVING:', entity);
+      // console.log('SAVING:', entity);
 
       await this.tableClient.upsertEntity(entity);
       logger.debug(`Entity upserted: [${partitionKey}, ${rowKey}]`);
