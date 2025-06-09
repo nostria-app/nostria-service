@@ -95,7 +95,7 @@ router.post('/webpush/:pubkey', async (req, res) => {
       // endpoint: subscription.endpoint,
       // deviceKey: rowKey, // Store p256dh explicitly for easier querying
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     });
 
     logger.info(`Web Push subscription saved for user ${pubkey}, device key: ${rowKey.substring(0, 16)}...`);
@@ -156,19 +156,25 @@ router.post('/settings/:pubkey', async (req, res) => {
     const { pubkey } = req.params;
     const settings = req.body;
 
+    console.log('Received settings:', settings);
+
     if (!pubkey) {
       return res.status(400).json({ error: 'Invalid pubkey' });
     }
 
     // Check if user has premium subscription for custom filters
-    const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
+    // TODO: Enable this when premium subscriptions are implemented
+    // const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
 
-    // Non-premium users can only update basic settings
-    if (!isPremium && settings.filters) {
-      return res.status(403).json({
-        error: 'Custom filters are only available for premium subscribers'
-      });
-    }
+    // // Non-premium users can only update basic settings
+    // if (!isPremium && settings.filters) {
+    //   return res.status(403).json({
+    //     error: 'Custom filters are only available for premium subscribers'
+    //   });
+    // }
+
+    console.log('PUBKEY:', pubkey);
+    console.log('Settings to save:', settings);
 
     // Store the settings
     await tableStorage.upsertEntity(pubkey, 'notification-settings', {
@@ -224,6 +230,7 @@ router.get('/devices/:pubkey', async (req, res) => {
         return {
           deviceId: entity.rowKey,
           endpoint: subscription.endpoint,
+          userAgent: subscription.userAgent || null, // Optional field
           // Extract browser/device info if available in the subscription
           lastUpdated: entity.updatedAt,
           createdAt: entity.createdAt
