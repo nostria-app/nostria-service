@@ -7,7 +7,8 @@ const logger = require('./logger');
  */
 class TableStorageService {
   constructor() {
-    this.tableName = process.env.TABLE_NAME || "notifications";
+    this.notificationsTableName = process.env.TABLE_NAME || "notifications";
+    this.settingsTableName = "settings";
     this.initializeClient();
   }
 
@@ -21,9 +22,13 @@ class TableStorageService {
         this.serviceClient = TableServiceClient.fromConnectionString(
           process.env.AZURE_STORAGE_CONNECTION_STRING
         );
-        this.tableClient = TableClient.fromConnectionString(
+        this.notificationsTableClient = TableClient.fromConnectionString(
           process.env.AZURE_STORAGE_CONNECTION_STRING,
-          this.tableName
+          this.notificationsTableName
+        );
+        this.settingsTableClient = TableClient.fromConnectionString(
+          process.env.AZURE_STORAGE_CONNECTION_STRING,
+          this.settingsTableName
         );
       } else {
         // Use managed identity (preferred for production)
@@ -39,16 +44,25 @@ class TableStorageService {
           credential
         );
 
-        this.tableClient = new TableClient(
+        this.notificationsTableClient = new TableClient(
           `https://${accountName}.table.core.windows.net`,
-          this.tableName,
+          this.notificationsTableName,
+          credential
+        );
+
+        this.settingsTableClient = new TableClient(
+          `https://${accountName}.table.core.windows.net`,
+          this.settingsTableName,
           credential
         );
       }
 
-      this.ensureTableExists();
+      // For backward compatibility, keep tableClient pointing to notifications table
+      this.tableClient = this.notificationsTableClient;
 
-      logger.info(`Table Storage client initialized for table: ${this.tableName}`);
+      this.ensureTablesExist();
+
+      logger.info(`Table Storage clients initialized for tables: ${this.notificationsTableName}, ${this.settingsTableName}`);
     } catch (error) {
       logger.error(`Failed to initialize Table Storage client: ${error.message}`);
       throw error;
@@ -56,44 +70,32 @@ class TableStorageService {
   }
 
   /**
-   * Ensure the table exists, create if it doesn't
+   * Ensure the tables exist, create if they don't
    */
-  async ensureTableExists() {
+  async ensureTablesExist() {
     try {
-      await this.serviceClient.createTable(this.tableName);
-      logger.info(`Table '${this.tableName}' created or already exists`);
+      // Create notifications table
+      await this.serviceClient.createTable(this.notificationsTableName);
+      logger.info(`Table '${this.notificationsTableName}' created or already exists`);
+      
+      // Create settings table
+      await this.serviceClient.createTable(this.settingsTableName);
+      logger.info(`Table '${this.settingsTableName}' created or already exists`);
     } catch (error) {
       // If table already exists, that's fine
       if (error.statusCode !== 409) {
-        logger.error(`Error ensuring table exists: ${error.message}`);
+        logger.error(`Error ensuring tables exist: ${error.message}`);
         throw error;
       }
     }
   }
 
   /**
-   * Store entity in the table
-   * @param {string} partitionKey - User's pubkey
-   * @param {string} rowKey - Entity type (subscription, notification-subscription, etc.)
-   * @param {object} data - Entity data
-   * @returns {Promise<object>} - The stored entity
+   * Ensure the table exists, create if it doesn't
+   * @deprecated Use ensureTablesExist() instead
    */
-  async upsertEntity(partitionKey, rowKey, data) {
-    try {
-      const entity = {
-        partitionKey,
-        rowKey,
-        ...data,
-        timestamp: new Date(),
-      };
-
-      await this.tableClient.upsertEntity(entity);
-      logger.debug(`Entity upserted: [${partitionKey}, ${rowKey}]`);
-      return entity;
-    } catch (error) {
-      logger.error(`Error upserting entity [${partitionKey}, ${rowKey}]: ${error.message}`);
-      throw error;
-    }
+  async ensureTableExists() {
+    return this.ensureTablesExist();
   }
 
   /**
@@ -207,7 +209,6 @@ class TableStorageService {
       throw error;
     }
   }
-
   /**
    * Log a notification that was sent
    * @param {string} pubkey - User's pubkey
@@ -223,6 +224,79 @@ class TableStorageService {
       template: notification.template,
       sentAt: timestamp
     });
+  }
+  
+  /**
+   * Store entity in the table
+   * @param {string} partitionKey - User's pubkey
+   * @param {string} rowKey - Entity type (subscription, notification-subscription, etc.)
+   * @param {object} data - Entity data
+   * @returns {Promise<object>} - The stored entity
+   */
+  async upsertEntity(partitionKey, rowKey, data) {
+    try {
+      const entity = {
+        partitionKey,
+        rowKey,
+        ...data,
+        created: new Date().toISOString(),
+      };
+
+      console.log('SAVING:', entity);
+
+      await this.tableClient.upsertEntity(entity);
+      logger.debug(`Entity upserted: [${partitionKey}, ${rowKey}]`);
+      return entity;
+    } catch (error) {
+      logger.error(`Error upserting entity [${partitionKey}, ${rowKey}]: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Store notification settings in the settings table
+   * @param {string} pubkey - User's pubkey (partition key)
+   * @param {object} settings - Settings data
+   * @returns {Promise<object>} - The stored entity
+   */
+  async upsertNotificationSettings(pubkey, settings) {
+    try {
+      const entity = {
+        partitionKey: pubkey,
+        rowKey: "notifications",
+        ...settings,
+        created: new Date().toISOString()
+      };
+
+      console.log('SAVING SETTINGS:', entity);
+
+      await this.settingsTableClient.upsertEntity(entity);
+      logger.debug(`Notification settings upserted for user: ${pubkey}`);
+      return entity;
+    } catch (error) {
+      logger.error(`Error upserting notification settings for user ${pubkey}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Get notification settings from the settings table
+   * @param {string} pubkey - User's pubkey (partition key)
+   * @returns {Promise<object|null>} - The retrieved settings or null if not found
+   */
+  async getNotificationSettings(pubkey) {
+    try {
+      const entity = await this.settingsTableClient.getEntity(pubkey, "notifications");
+      return entity;
+    } catch (error) {
+      if (error.statusCode === 404) {
+        logger.debug(`Notification settings not found for user: ${pubkey}`);
+        return null;
+      }
+
+      logger.error(`Error getting notification settings for user ${pubkey}: ${error.message}`);
+      throw error;
+    }
   }
 }
 
