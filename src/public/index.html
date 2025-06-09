@@ -140,6 +140,87 @@
             font-family: monospace;
         }
 
+        /* Form styles */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.2s ease-in-out;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .btn:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .btn:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .form-note {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .alert.success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .alert.error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+        }
+
         footer {
             text-align: center;
             padding: 2rem 0;
@@ -225,12 +306,16 @@
                         <td><span class="method get">GET</span></td>
                         <td><span class="endpoint"><a href="/api/status/health">/api/status/health</a></span></td>
                         <td>Health check endpoint</td>
-                    </tr>
-                    <tr>
+                    </tr>                    <tr>
                         <td><span class="method get">GET</span></td>
                         <td><span class="endpoint"><a href="/api/key">/api/key</a></span></td>
                         <td>Get service public key (VAPID)</td>
-                    </tr>                    <tr>
+                    </tr>
+                    <tr>
+                        <td><span class="method post">POST</span></td>
+                        <td><span class="endpoint">/api/notification/send</span></td>
+                        <td>Send notifications to users (API key required)</td>
+                    </tr><tr>
                         <td><span class="method post">POST</span></td>
                         <td><span class="endpoint">/api/subscription/webpush/:pubkey</span></td>
                         <td>Register a web push subscription for a user's device</td>
@@ -293,13 +378,130 @@
                 <li>Register a Web Push subscription with your Nostr public key</li>
                 <li>Configure your notification preferences</li>
                 <li>Ensure your app or service integrates with the notification API</li>
-            </ol>
-            <p>
+            </ol>            <p>
                 For developers who want to send notifications, you need to authenticate using the API key.
                 Please contact the service administrator for API access.
             </p>
         </div>
+
+        <div class="card">
+            <h2>Send Notification</h2>
+            <p>Use this form to manually send notifications to users. Requires API key authentication.</p>
+            
+            <div id="notification-alert" style="display: none;"></div>
+            
+            <form id="notification-form">
+                <div class="form-group">
+                    <label for="pubkeys">Public Keys (comma-separated)</label>
+                    <input type="text" id="pubkeys" name="pubkeys" placeholder="Leave empty to send to all users">
+                    <div class="form-note">Enter Nostr public keys separated by commas, or leave empty to send to all registered users</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="title">Notification Title *</label>
+                    <input type="text" id="title" name="title" required placeholder="Enter notification title">
+                </div>
+
+                <div class="form-group">
+                    <label for="body">Notification Body *</label>
+                    <textarea id="body" name="body" required placeholder="Enter notification message"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="icon">Icon URL</label>
+                    <input type="url" id="icon" name="icon" value="https://nostria.app/icons/icon-128x128.png" placeholder="https://nostria.app/icons/icon-128x128.png">
+                </div>
+
+                <div class="form-group">
+                    <label for="url">Action URL</label>
+                    <input type="url" id="url" name="url" placeholder="https://example.com (optional)">
+                    <div class="form-note">URL to open when the notification is clicked</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="apiKey">API Key *</label>
+                    <input type="password" id="apiKey" name="apiKey" required placeholder="Enter your API key">
+                    <div class="form-note">This key will be sent as the x-api-key header</div>
+                </div>
+
+                <button type="submit" class="btn" id="submit-btn">Send Notification</button>
+            </form>
+        </div>
     </div>
+
+    <script>
+        document.getElementById('notification-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submit-btn');
+            const alertDiv = document.getElementById('notification-alert');
+            
+            // Disable button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+            alertDiv.style.display = 'none';
+            
+            try {
+                // Get form data
+                const formData = new FormData(this);
+                const data = {
+                    title: formData.get('title'),
+                    body: formData.get('body'),
+                    icon: formData.get('icon'),
+                    url: formData.get('url') || undefined
+                };
+                
+                // Add pubkeys if specified
+                const pubkeysInput = formData.get('pubkeys');
+                if (pubkeysInput && pubkeysInput.trim()) {
+                    data.pubkeys = pubkeysInput.split(',').map(pk => pk.trim()).filter(pk => pk);
+                }
+                
+                // Make API request
+                const response = await fetch('/api/notification/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': formData.get('apiKey')
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                  if (response.ok) {
+                    // Show success message
+                    alertDiv.className = 'alert success';
+                    const summary = result.summary;
+                    if (summary) {
+                        alertDiv.textContent = `Notification sent successfully! Targeted: ${summary.totalTargeted} users, Successful: ${summary.successful}, Failed: ${summary.failed}, Filtered: ${summary.filtered}, Rate Limited: ${summary.limited}`;
+                    } else {
+                        alertDiv.textContent = `Notification sent successfully! ${result.message || ''}`;
+                    }
+                    alertDiv.style.display = 'block';
+                    
+                    // Reset form (except API key)
+                    const apiKey = formData.get('apiKey');
+                    this.reset();
+                    document.getElementById('apiKey').value = apiKey;
+                    document.getElementById('icon').value = 'https://nostria.app/icons/icon-128x128.png';
+                } else {
+                    // Show error message
+                    alertDiv.className = 'alert error';
+                    alertDiv.textContent = `Error: ${result.error || result.message || 'Failed to send notification'}`;
+                    alertDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error sending notification:', error);
+                alertDiv.className = 'alert error';
+                alertDiv.textContent = 'Network error: Failed to send notification. Please try again.';
+                alertDiv.style.display = 'block';
+            } finally {
+                // Re-enable button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Notification';
+            }
+        });
+    </script>
 
     <footer>
         <div class="container">

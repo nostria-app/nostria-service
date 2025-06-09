@@ -141,6 +141,21 @@ class TableStorageService {
       throw error;
     }
   }
+  /**
+   * Get all unique user public keys (partition keys) from the notifications table
+   * @returns {Promise<Array>} - Array of unique pubkeys
+   */
+  async getAllUserPubkeys() {
+    try {
+      const entities = await this.queryEntities('PartitionKey ne \'\'');
+      const uniquePubkeys = [...new Set(entities.map(entity => entity.partitionKey))];
+      logger.debug(`Found ${uniquePubkeys.length} unique users in the system`);
+      return uniquePubkeys;
+    } catch (error) {
+      logger.error(`Error getting all user pubkeys: ${error.message}`);
+      throw error;
+    }
+  }
 
   /**
    * Get all entities for a specific user (partition)

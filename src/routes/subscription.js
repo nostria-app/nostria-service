@@ -150,8 +150,6 @@ router.post('/settings/:pubkey', async (req, res) => {
     const { pubkey } = req.params;
     let settings = req.body;
 
-    console.log('Received settings:', settings);
-
     if (!pubkey) {
       return res.status(400).json({ error: 'Invalid pubkey' });
     }
@@ -166,7 +164,6 @@ router.post('/settings/:pubkey', async (req, res) => {
     //     error: 'Custom filters are only available for premium subscribers'
     //   });
     // }    console.log('PUBKEY:', pubkey);
-    console.log('Settings to save:', settings);
 
     // settings = [];
 
