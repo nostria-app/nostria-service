@@ -145,9 +145,8 @@ router.get('/status/:pubkey', async (req, res) => {
     
     // Check premium status
     const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
-    
-    // Get notification settings
-    const settings = await tableStorage.getEntity(pubkey, 'notification-settings');
+      // Get notification settings from the settings table
+    const settings = await tableStorage.getNotificationSettings(pubkey);
     
     // Get 24-hour notification count
     const notificationCount = await tableStorage.get24HourNotificationCount(pubkey);
