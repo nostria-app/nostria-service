@@ -26,8 +26,8 @@ interface DeviceInfo {
   deviceId: string;
   endpoint: string;
   userAgent?: string | null;
-  lastUpdated?: string;
-  createdAt?: string;
+  created?: string;
+  modified?: string;
 }
 
 /** Forwards the incoming notification to all instances for this user. Used for testing or syncing data across devices. */
@@ -253,9 +253,6 @@ router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void
     // Get all user subscription entities
     const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
 
-    console.log('Pubkey:', pubkey);
-    console.log('SUBSCRIPTION ENTITIES:', subscriptionEntities);
-
     // Extract relevant info from subscription entities
     const devices: DeviceInfo[] = subscriptionEntities
       .map(entity => {
@@ -265,8 +262,8 @@ router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void
           endpoint: subscription.endpoint,
           userAgent: subscription.userAgent || null, // Optional field
           // Extract browser/device info if available in the subscription
-          lastUpdated: entity.updatedAt,
-          createdAt: entity.createdAt
+          modified: entity.timestamp,
+          created: entity.created
         };
       });
 

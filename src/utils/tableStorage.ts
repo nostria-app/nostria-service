@@ -11,6 +11,7 @@ interface TableEntity {
 interface SubscriptionEntity extends TableEntity {
   subscription: string;
   created?: string;
+  timestamp?: string;
 }
 
 interface NotificationSettings extends TableEntity {
