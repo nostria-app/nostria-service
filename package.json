@@ -2,10 +2,11 @@
   "name": "nostria-notification",
   "version": "0.0.1",
   "description": "Notification Service for Nostria",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "dev": "tsx watch src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -28,8 +29,14 @@
     "uuid": "^11.1.0",
     "web-push": "^3.6.7",
     "winston": "^3.17.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.10"
+  },  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.4",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/uuid": "^9.0.7",
+    "@types/web-push": "^3.6.3",
+    "tsx": "^4.7.0"
   }
 }

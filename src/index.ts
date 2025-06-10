@@ -1,21 +1,22 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import path from 'path';
+import fs from 'fs';
 
 // Import routes
-const subscriptionRoutes = require('./routes/subscription');
-const notificationRoutes = require('./routes/notification');
-const statusRoutes = require('./routes/status');
-const keyRoutes = require('./routes/key');
+import subscriptionRoutes from './routes/subscription';
+import notificationRoutes from './routes/notification';
+import statusRoutes from './routes/status';
+import keyRoutes from './routes/key';
 
 // Import middleware
-const { apiKeyAuth } = require('./middleware/auth');
-const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const logger = require('./utils/logger');
+import { apiKeyAuth } from './middleware/auth';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import logger from './utils/logger';
 
 // Create data directory if it doesn't exist
 const dataDir = path.join(__dirname, '../data');
@@ -55,15 +56,15 @@ app.listen(PORT, () => {
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught Exception:', error);
   // Graceful shutdown
   process.exit(1);
 });
 
 // Handle unhandled rejections
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
   logger.error('Unhandled Promise Rejection:', reason);
 });
 
-module.exports = app;
+export default app;

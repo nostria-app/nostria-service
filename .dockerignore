@@ -9,6 +9,9 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 
+# TypeScript build output
+dist/
+
 # Environment variables
 .env
 .env.*
@@ -21,12 +24,14 @@ docs
 
 # Development files
 *.test.js
+*.test.ts
 tests/
 .vscode/
 .idea/
 *.log
 
+# Data directory (logs, etc.)
+data/
+
 # Build artifacts
-dist/
-build/
 coverage/

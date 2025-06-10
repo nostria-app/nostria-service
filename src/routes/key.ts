@@ -1,13 +1,13 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import logger from '../utils/logger';
+
 const router = express.Router();
-const os = require('os');
-const logger = require('../utils/logger');
 
 /**
  * Get service public key
  * @route GET /api/key
  */
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const status = {
       key: process.env.PUBLIC_VAPID_KEY,
@@ -15,9 +15,9 @@ router.get('/', async (req, res) => {
 
     res.status(200).json(status);
   } catch (error) {
-    logger.error(`Error getting service key: ${error.message}`);
+    logger.error(`Error getting service key: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to get key' });
   }
 });
 
-module.exports = router;
+export default router;

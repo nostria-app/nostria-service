@@ -1,28 +1,55 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import tableStorage from '../utils/tableStorage';
+import webPush from '../utils/webPush';
+import logger from '../utils/logger';
+import { nip98 } from 'nostr-tools';
+
 const router = express.Router();
-const tableStorage = require('../utils/tableStorage');
-const webPush = require('../utils/webPush');
-const logger = require('../utils/logger');
-const { nip98 } = require('nostr-tools');
+
+interface PushSubscription {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  userAgent?: string;
+}
+
+interface NotificationData {
+  title?: string;
+  body?: string;
+  icon?: string;
+  data?: any;
+}
+
+interface DeviceInfo {
+  deviceId: string;
+  endpoint: string;
+  userAgent?: string | null;
+  lastUpdated?: string;
+  createdAt?: string;
+}
 
 /** Forwards the incoming notification to all instances for this user. Used for testing or syncing data across devices. */
-router.post('/send/:pubkey', async (req, res) => {
+router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> => {
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
   let valid = false;
   try {
-    valid = await nip98.validateToken(req.headers.authorization, url, 'POST');
+    valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
   } catch (validationError) {
-    logger.warn(`NIP-98 validation error: ${validationError.message}`);
-    return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+    logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+    res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+    return;
   }
 
   if (!valid) {
-    return res.status(401).json({ error: 'Invalid or missing authorization token' });
+    res.status(401).json({ error: 'Invalid or missing authorization token' });
+    return;
   }
 
   const { pubkey } = req.params;
-  const notification = req.body;
+  const notification: NotificationData = req.body;
 
   const records = await tableStorage.getUserEntities(pubkey);
 
@@ -47,7 +74,7 @@ router.post('/send/:pubkey', async (req, res) => {
     const notificationResult = await webPush.sendNotification(sub, payload);
 
     if (notificationResult.statusCode !== 201) {
-      logger.error(`Failed to send notification to ${record.partitionKey}: ${notificationResult.statusMessage}`);
+      logger.error(`Failed to send notification to ${record.partitionKey}: ${notificationResult.statusCode}`);
     }
   }
 
@@ -61,27 +88,30 @@ router.post('/send/:pubkey', async (req, res) => {
  * Save Web Push subscription for a user
  * @route POST /api/subscription/webpush/:pubkey
  */
-router.post('/webpush/:pubkey', async (req, res) => {
+router.post('/webpush/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
     let valid = false;
     try {
-      valid = await nip98.validateToken(req.headers.authorization, url, 'POST');
+      valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
     } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${validationError.message}`);
-      return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+      return;
     }
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+      res.status(401).json({ error: 'Invalid or missing authorization token' });
+      return;
     }
 
     const { pubkey } = req.params;
-    const subscription = req.body;
+    const subscription: PushSubscription = req.body;
 
     if (!pubkey || !subscription || !subscription.endpoint || !subscription.keys || !subscription.keys.p256dh) {
-      return res.status(400).json({ error: 'Invalid subscription data. Missing endpoint or p256dh key.' });
+      res.status(400).json({ error: 'Invalid subscription data. Missing endpoint or p256dh key.' });
+      return;
     }
 
     // Use p256dh as the rowKey to allow multiple devices per user
@@ -114,7 +144,7 @@ router.post('/webpush/:pubkey', async (req, res) => {
       logger.info(`Test notification sent to new device for user ${pubkey}`);
     } catch (notificationError) {
       // Just log the error but don't fail the registration process
-      logger.warn(`Failed to send test notification to new device: ${notificationError.message}`);
+      logger.warn(`Failed to send test notification to new device: ${(notificationError as Error).message}`);
     }
 
     res.status(201).json({
@@ -122,7 +152,7 @@ router.post('/webpush/:pubkey', async (req, res) => {
       message: 'Subscription saved successfully'
     });
   } catch (error) {
-    logger.error(`Error saving subscription: ${error.message}`);
+    logger.error(`Error saving subscription: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to save subscription' });
   }
 });
@@ -131,27 +161,30 @@ router.post('/webpush/:pubkey', async (req, res) => {
  * Save user notification settings
  * @route POST /api/subscription/settings/:pubkey
  */
-router.post('/settings/:pubkey', async (req, res) => {
+router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
     let valid = false;
     try {
-      valid = await nip98.validateToken(req.headers.authorization, url, 'POST');
+      valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
     } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${validationError.message}`);
-      return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+      return;
     }
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+      res.status(401).json({ error: 'Invalid or missing authorization token' });
+      return;
     }
 
     const { pubkey } = req.params;
-    let settings = req.body;
+    let settings: any = req.body;
 
     if (!pubkey) {
-      return res.status(400).json({ error: 'Invalid pubkey' });
+      res.status(400).json({ error: 'Invalid pubkey' });
+      return;
     }
 
     // Check if user has premium subscription for custom filters
@@ -160,10 +193,13 @@ router.post('/settings/:pubkey', async (req, res) => {
 
     // // Non-premium users can only update basic settings
     // if (!isPremium && settings.filters) {
-    //   return res.status(403).json({
+    //   res.status(403).json({
     //     error: 'Custom filters are only available for premium subscribers'
     //   });
-    // }    console.log('PUBKEY:', pubkey);
+    //   return;
+    // }
+
+    console.log('PUBKEY:', pubkey);
 
     // settings = [];
 
@@ -180,7 +216,7 @@ router.post('/settings/:pubkey', async (req, res) => {
       // isPremium
     });
   } catch (error) {
-    logger.error(`Error updating notification settings: ${error.message}`);
+    logger.error(`Error updating notification settings: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to update notification settings' });
   }
 });
@@ -189,26 +225,29 @@ router.post('/settings/:pubkey', async (req, res) => {
  * Get all devices (subscriptions) for a user
  * @route GET /api/subscription/devices/:pubkey
  */
-router.get('/devices/:pubkey', async (req, res) => {
+router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
     let valid = false;
     try {
-      valid = await nip98.validateToken(req.headers.authorization, url, 'GET');
+      valid = await nip98.validateToken(req.headers.authorization!, url, 'GET');
     } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${validationError.message}`);
-      return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+      return;
     }
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+      res.status(401).json({ error: 'Invalid or missing authorization token' });
+      return;
     }
 
     const { pubkey } = req.params;
 
     if (!pubkey) {
-      return res.status(400).json({ error: 'Invalid pubkey' });
+      res.status(400).json({ error: 'Invalid pubkey' });
+      return;
     }
 
     // Get all user subscription entities
@@ -218,7 +257,7 @@ router.get('/devices/:pubkey', async (req, res) => {
     console.log('SUBSCRIPTION ENTITIES:', subscriptionEntities);
 
     // Extract relevant info from subscription entities
-    const devices = subscriptionEntities
+    const devices: DeviceInfo[] = subscriptionEntities
       .map(entity => {
         const subscription = JSON.parse(entity.subscription);
         return {
@@ -237,7 +276,7 @@ router.get('/devices/:pubkey', async (req, res) => {
       devices
     });
   } catch (error) {
-    logger.error(`Error getting user devices: ${error.message}`);
+    logger.error(`Error getting user devices: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to get user devices' });
   }
 });
@@ -246,37 +285,43 @@ router.get('/devices/:pubkey', async (req, res) => {
  * Get user notification settings
  * @route GET /api/subscription/settings/:pubkey
  */
-router.get('/settings/:pubkey', async (req, res) => {
+router.get('/settings/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
     let valid = false;
     try {
-      valid = await nip98.validateToken(req.headers.authorization, url, 'GET');
+      valid = await nip98.validateToken(req.headers.authorization!, url, 'GET');
     } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${validationError.message}`);
-      return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+      return;
     }
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+      res.status(401).json({ error: 'Invalid or missing authorization token' });
+      return;
     }
 
     const { pubkey } = req.params;
 
     if (!pubkey) {
-      return res.status(400).json({ error: 'Invalid pubkey' });
-    }    // Get user settings from the settings table
+      res.status(400).json({ error: 'Invalid pubkey' });
+      return;
+    }
+
+    // Get user settings from the settings table
     const settings = await tableStorage.getNotificationSettings(pubkey);
 
     // Check if user has premium subscription
     // const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
 
     if (!settings) {
-      return res.status(200).json({
+      res.status(200).json({
         enabled: true, // Default value
         // isPremium
       });
+      return;
     }
 
     // Remove internal fields
@@ -287,7 +332,7 @@ router.get('/settings/:pubkey', async (req, res) => {
       // isPremium
     });
   } catch (error) {
-    logger.error(`Error getting notification settings: ${error.message}`);
+    logger.error(`Error getting notification settings: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to get notification settings' });
   }
 });
@@ -296,32 +341,36 @@ router.get('/settings/:pubkey', async (req, res) => {
  * Delete user's subscription for a specific device
  * @route DELETE /api/subscription/webpush/:pubkey/:deviceKey
  */
-router.delete('/webpush/:pubkey/:deviceKey', async (req, res) => {
+router.delete('/webpush/:pubkey/:deviceKey', async (req: Request, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
     let valid = false;
     try {
-      valid = await nip98.validateToken(req.headers.authorization, url, 'DELETE');
+      valid = await nip98.validateToken(req.headers.authorization!, url, 'DELETE');
     } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${validationError.message}`);
-      return res.status(401).json({ error: `Authorization validation failed: ${validationError.message}` });
+      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
+      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
+      return;
     }
 
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid or missing authorization token' });
+      res.status(401).json({ error: 'Invalid or missing authorization token' });
+      return;
     }
 
     const { pubkey, deviceKey } = req.params;
 
     if (!pubkey || !deviceKey) {
-      return res.status(400).json({ error: 'Invalid pubkey or deviceKey' });
+      res.status(400).json({ error: 'Invalid pubkey or deviceKey' });
+      return;
     }
 
     const entity = await tableStorage.getEntity(pubkey, deviceKey);
 
     if (!entity) {
-      return res.status(404).json({ error: 'Subscription not found' });
+      res.status(404).json({ error: 'Subscription not found' });
+      return;
     }
 
     // Delete the subscription from Azure Table Storage
@@ -334,9 +383,9 @@ router.delete('/webpush/:pubkey/:deviceKey', async (req, res) => {
       message: 'Subscription deleted successfully'
     });
   } catch (error) {
-    logger.error(`Error deleting subscription: ${error.message}`);
+    logger.error(`Error deleting subscription: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to delete subscription' });
   }
 });
 
-module.exports = router;
+export default router;

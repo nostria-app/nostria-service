@@ -1,28 +1,72 @@
-const express = require('express');
-const router = express.Router();
-const tableStorage = require('../utils/tableStorage');
-const webPush = require('../utils/webPush');
-// const vasipProtocol = require('../utils/vapidProtocol');
-const logger = require('../utils/logger');
+import express, { Request, Response } from 'express';
+import tableStorage from '../utils/tableStorage';
+import webPush from '../utils/webPush';
+import logger from '../utils/logger';
 
+const router = express.Router();
+
+interface NotificationRequest {
+  pubkeys?: string[];
+  template?: string;
+  args?: Record<string, any>;
+  title?: string;
+  body?: string;
+  icon?: string;
+  url?: string;
+}
+
+interface NotificationResult {
+  success: Array<{ pubkey: string; successCount: number; failCount: number }>;
+  failed: Array<{ pubkey: string; reason: string; deviceCount?: number }>;
+  filtered: Array<{ pubkey: string; reason: string }>;
+  limited: Array<{ pubkey: string; reason: string }>;
+}
+
+interface NotificationPayload {
+  title?: string;
+  body?: string;
+  content?: string;
+  template?: string;
+  icon?: string;
+  url?: string;
+  timestamp: string;
+}
+
+interface WebPushPayload {
+  title?: string;
+  content?: string;
+  template?: string;
+  timestamp?: string;
+  notification?: {
+    title: string;
+    body: string;
+    icon: string;
+    data?: {
+      onActionClick: {
+        default: { operation: string; url: string };
+      };
+    };
+  };
+}
 
 /**
  * Send notification to users
  * @route POST /api/notification/send
  * Protected by API key
  */
-router.post('/send', async (req, res) => {
+router.post('/send', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { pubkeys, template, args, title, body, icon, url } = req.body;
+    const { pubkeys, template, args, title, body, icon, url }: NotificationRequest = req.body;
     
     // Support both template-based and direct notification formats
-    let notificationPayload;
+    let notificationPayload: NotificationPayload;
     let targetPubkeys = pubkeys;
     
     if (template) {
       // Legacy template-based format
       if (!template) {
-        return res.status(400).json({ error: 'Template is required when using template format' });
+        res.status(400).json({ error: 'Template is required when using template format' });
+        return;
       }
       
       // Process the notification content
@@ -37,7 +81,8 @@ router.post('/send', async (req, res) => {
     } else {
       // New direct format from the form
       if (!title || !body) {
-        return res.status(400).json({ error: 'Title and body are required' });
+        res.status(400).json({ error: 'Title and body are required' });
+        return;
       }
       
       notificationPayload = {
@@ -48,18 +93,21 @@ router.post('/send', async (req, res) => {
         timestamp: new Date().toISOString()
       };
     }
-      // If no pubkeys specified, get all registered users
+
+    // If no pubkeys specified, get all registered users
     if (!targetPubkeys || targetPubkeys.length === 0) {
       try {
         targetPubkeys = await tableStorage.getAllUserPubkeys();
         logger.info(`Broadcasting notification to all ${targetPubkeys.length} registered users`);
       } catch (error) {
-        logger.error(`Error getting all users: ${error.message}`);
-        return res.status(500).json({ error: 'Failed to get user list for broadcast' });
+        logger.error(`Error getting all users: ${(error as Error).message}`);
+        res.status(500).json({ error: 'Failed to get user list for broadcast' });
+        return;
       }
     }
-      // Process notifications for each pubkey
-    const results = {
+
+    // Process notifications for each pubkey
+    const results: NotificationResult = {
       success: [],
       failed: [],
       filtered: [],
@@ -84,7 +132,7 @@ router.post('/send', async (req, res) => {
         }
         
         // Create the Web Push notification payload
-        let webPushPayload;
+        let webPushPayload: WebPushPayload;
         if (template) {
           // Legacy template format - keep existing behavior
           const passesFilters = await webPush.passesCustomFilters(pubkey, notificationPayload);
@@ -94,16 +142,14 @@ router.post('/send', async (req, res) => {
           }
           
           // Use legacy signing if available
-          webPushPayload = typeof webPush.signNotification === 'function' 
-            ? await webPush.signNotification(pubkey, notificationPayload)
-            : notificationPayload;
+          webPushPayload = notificationPayload as WebPushPayload;
         } else {
           // New direct format - create Web Push payload structure
           webPushPayload = {
             notification: {
-              title: notificationPayload.title,
-              body: notificationPayload.body,
-              icon: notificationPayload.icon,
+              title: notificationPayload.title!,
+              body: notificationPayload.body!,
+              icon: notificationPayload.icon!,
               data: notificationPayload.url ? {
                 onActionClick: {
                   default: { operation: "navigateLastFocusedOrOpen", url: notificationPayload.url + "?pubkey=" + pubkey }
@@ -116,7 +162,8 @@ router.post('/send', async (req, res) => {
             }
           };
         }
-          let deviceSuccessCount = 0;
+
+        let deviceSuccessCount = 0;
         let deviceFailCount = 0;
         
         // Send notification to all user's devices
@@ -136,7 +183,7 @@ router.post('/send', async (req, res) => {
               deviceSuccessCount++;
             }
           } catch (deviceError) {
-            logger.error(`Error sending notification to device ${subscriptionEntity.rowKey.substring(0, 16)}... for user ${pubkey}: ${deviceError.message}`);
+            logger.error(`Error sending notification to device ${subscriptionEntity.rowKey.substring(0, 16)}... for user ${pubkey}: ${(deviceError as Error).message}`);
             deviceFailCount++;
           }
         }
@@ -158,11 +205,12 @@ router.post('/send', async (req, res) => {
           });
         }
       } catch (error) {
-        logger.error(`Failed to send notification to ${pubkey}: ${error.message}`);
-        results.failed.push({ pubkey, reason: error.message });
+        logger.error(`Failed to send notification to ${pubkey}: ${(error as Error).message}`);
+        results.failed.push({ pubkey, reason: (error as Error).message });
       }
     }
-      // Log summary
+
+    // Log summary
     const totalTargeted = targetPubkeys.length;
     logger.info(`Notification sent to ${results.success.length}/${totalTargeted} users, ` +
       `failed for ${results.failed.length}, ` +
@@ -180,7 +228,7 @@ router.post('/send', async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error(`Error sending notifications: ${error.message}`);
+    logger.error(`Error sending notifications: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to process notifications' });
   }
 });
@@ -190,20 +238,24 @@ router.post('/send', async (req, res) => {
  * @route GET /api/notification/status/:pubkey
  * Protected by API key
  */
-router.get('/status/:pubkey', async (req, res) => {
+router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const { pubkey } = req.params;
     
     if (!pubkey) {
-      return res.status(400).json({ error: 'Invalid pubkey' });
-    }    // Check subscription status - get all user's devices
+      res.status(400).json({ error: 'Invalid pubkey' });
+      return;
+    }
+
+    // Check subscription status - get all user's devices
     const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
     const hasSubscription = subscriptionEntities.length > 0;
     const deviceCount = subscriptionEntities.length;
     
     // Check premium status
     const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
-      // Get notification settings from the settings table
+      
+    // Get notification settings from the settings table
     const settings = await tableStorage.getNotificationSettings(pubkey);
     
     // Get 24-hour notification count
@@ -211,9 +263,10 @@ router.get('/status/:pubkey', async (req, res) => {
     
     // Get daily limits based on tier
     const dailyLimit = isPremium
-      ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || 50)
-      : parseInt(process.env.FREE_TIER_DAILY_LIMIT || 5);
-      const status = {
+      ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || '50')
+      : parseInt(process.env.FREE_TIER_DAILY_LIMIT || '5');
+      
+    const status = {
       pubkey,
       hasSubscription,
       deviceCount,
@@ -228,9 +281,9 @@ router.get('/status/:pubkey', async (req, res) => {
     
     res.status(200).json(status);
   } catch (error) {
-    logger.error(`Error getting notification status: ${error.message}`);
+    logger.error(`Error getting notification status: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to get notification status' });
   }
 });
 
-module.exports = router;
+export default router;
