@@ -21,14 +21,14 @@
     "noFallthroughCasesInSwitch": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
-    "types": ["node"]
+    "types": ["node", "jest"],
+    "isolatedModules": true
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "**/*.test.ts"
+    "dist"
   ]
 }
