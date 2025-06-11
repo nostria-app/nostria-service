@@ -8,6 +8,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Import routes
+import account from './routes/account';
 import subscriptionRoutes from './routes/subscription';
 import notificationRoutes from './routes/notification';
 import statusRoutes from './routes/status';
@@ -28,7 +29,9 @@ if (!fs.existsSync(dataDir)) {
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.set('trust proxy', true);
+// TODO: figure out correct number of proxies
+// see: https://express-rate-limit.mintlify.app/guides/troubleshooting-proxy-issues
+app.set('trust proxy', 1); 
 
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false })); // Secure HTTP headers
@@ -44,16 +47,19 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/notification', apiKeyAuth, notificationRoutes); // Protected route
 app.use('/api/status', statusRoutes);
 app.use('/api/key', keyRoutes);
+app.use('/api/account', account);
 
 // Error handling middleware
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Start server
-app.listen(PORT, () => {
-  logger.info(`Server is running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  // Start server
+  app.listen(PORT, () => {
+    logger.info(`Server is running on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV}`);
+  });
+}
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
