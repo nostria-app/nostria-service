@@ -10,7 +10,7 @@ export type TableEntity<T> = {
 export class BaseTableStorageService<T> {
   protected tableName: string;
   protected serviceClient!: TableServiceClient;
-  public tableClient!: TableClient;
+  protected tableClient!: TableClient;
 
   constructor(tableName: string) {
     this.tableName = tableName;
