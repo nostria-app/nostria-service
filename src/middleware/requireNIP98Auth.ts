@@ -28,8 +28,6 @@ const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction
     
     try {
       const token = authHeader.replace('Nostr ', '');
-
-      console.log(token, url, req.method)
       
       valid = await nip98.validateToken(token, url, req.method);
       // Extract pubkey from the token

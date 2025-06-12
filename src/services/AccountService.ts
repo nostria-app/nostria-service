@@ -3,6 +3,7 @@ import BaseTableStorageService, { TableEntity } from "./BaseTableStorageService"
 export interface Account {
   pubkey: string;
   email: string | null;
+  username?: string;
   createdAt: Date;
   updatedAt: Date;
   lastLoginDate?: Date;
@@ -36,7 +37,33 @@ class AccountService extends BaseTableStorageService<Account> {
     return account;
   }
 
+  async isUsernameTaken(username: string, excludePubkey?: string): Promise<boolean> {
+    try {
+      // Query for any account with this username, excluding the current account if specified
+      const filter = excludePubkey
+        ? `username eq '${username}' and rowKey ne '${excludePubkey}'`
+        : `username eq '${username}'`;
+
+      const iterator = this.tableClient.listEntities({ queryOptions: { filter } });
+      const entities = [];
+      for await (const entity of iterator) {
+        entities.push(entity);
+      }
+      return entities.length > 0;
+    } catch (error) {
+      throw new Error(`Failed to check username uniqueness: ${(error as Error).message}`);
+    }
+  }
+
   async updateAccount(account: Account): Promise<Account> {
+    // If username is being set or changed, check for uniqueness
+    if (account.username) {
+      const isTaken = await this.isUsernameTaken(account.username, account.pubkey);
+      if (isTaken) {
+        throw new Error('Username is already taken');
+      }
+    }
+
     const updated: Account = {
       ...account,
       updatedAt: new Date()

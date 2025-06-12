@@ -1,15 +1,15 @@
 process.env.AZURE_STORAGE_ACCOUNT = "test"
 jest.mock('@azure/data-tables')
+import { createMockIterator } from "../helpers/testHelper";
 import accountService, { Account } from "./AccountService";
 
-
 describe("AccountService", () => {
-  let mockTableClient: { upsertEntity: jest.Mock; getEntity: jest.Mock };
+  let mockTableClient: { upsertEntity: jest.Mock; getEntity: jest.Mock; listEntities: jest.Mock };
 
   beforeEach(() => {
     // Clear all mocks before each test
     jest.clearAllMocks();
-    
+
     // Get the mocked tableClient from the BaseTableStorageService instance
     mockTableClient = (accountService as any).tableClient;
   });
@@ -153,7 +153,7 @@ describe("AccountService", () => {
       );
     });
 
-    it("should update an account with optional fields", async () => {
+    it("should allow updating username when it's not taken", async () => {
       const originalDate = new Date("2024-01-01");
       const existingAccount: Account = {
         pubkey: "test-pubkey",
@@ -164,20 +164,18 @@ describe("AccountService", () => {
 
       const updatedAccount: Account = {
         ...existingAccount,
-        lastLoginDate: new Date(),
+        username: "newusername",
       };
+
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([]));
 
       const result = await accountService.updateAccount(updatedAccount);
 
-      // Verify the result has the new lastLoginDate and a new updatedAt timestamp
       expect(result).toEqual({
         ...updatedAccount,
         updatedAt: expect.any(Date),
       });
-      expect(result.updatedAt).not.toEqual(originalDate);
       expect(result.updatedAt.getTime()).toBeGreaterThan(originalDate.getTime());
-
-      // Verify the upsertEntity was called with correct parameters
       expect(mockTableClient.upsertEntity).toHaveBeenCalledWith(
         {
           partitionKey: "account",
@@ -187,6 +185,110 @@ describe("AccountService", () => {
         },
         "Replace"
       );
+
+    });
+
+    it("should allow account to keep its existing username", async () => {
+      const originalDate = new Date("2024-01-01");
+      const existingAccount: Account = {
+        pubkey: "test-pubkey",
+        email: "test@example.com",
+        username: "existinguser",
+        createdAt: originalDate,
+        updatedAt: originalDate,
+      };
+
+      const updatedAccount: Account = {
+        ...existingAccount,
+        email: "new@example.com",
+      };
+
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([]));
+
+      const result = await accountService.updateAccount(updatedAccount);
+
+      expect(result).toEqual({
+        ...updatedAccount,
+        updatedAt: expect.any(Date),
+      });
+      expect(result.username).toBe("existinguser");
+    });
+
+    it("should throw error when trying to use a taken username", async () => {
+      const originalDate = new Date("2024-01-01");
+      const existingAccount: Account = {
+        pubkey: "test-pubkey",
+        email: "test@example.com",
+        createdAt: originalDate,
+        updatedAt: originalDate,
+      };
+
+      const updatedAccount: Account = {
+        ...existingAccount,
+        username: "takenusername",
+      };
+
+      const takenAccount = {
+        partitionKey: "account",
+        rowKey: "other-pubkey",
+        username: "takenusername",
+        pubkey: "other-pubkey",
+        email: "other@example.com",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([takenAccount]));
+
+      await expect(accountService.updateAccount(updatedAccount)).rejects.toThrow(
+        "Username is already taken"
+      );
+      expect(mockTableClient.upsertEntity).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("isUsernameTaken", () => {
+    it("should return true when username is taken by another account", async () => {
+      const username = "testuser";
+      const otherAccount = {
+        partitionKey: "account",
+        rowKey: "other-pubkey",
+        username,
+        pubkey: "other-pubkey",
+        email: "other@example.com",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([otherAccount]));
+
+      const result = await accountService.isUsernameTaken(username);
+      expect(result).toBe(true);
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}'` }
+      });
+    });
+
+    it("should return false when username is not taken", async () => {
+      const username = "testuser";
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([]));
+
+      const result = await accountService.isUsernameTaken(username);
+      expect(result).toBe(false);
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}'` }
+      });
+    });
+
+    it("should exclude current account when checking username", async () => {
+      const username = "testuser";
+      const currentPubkey = "current-pubkey";
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([]));
+
+      const result = await accountService.isUsernameTaken(username, currentPubkey);
+      expect(result).toBe(false);
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}' and rowKey ne '${currentPubkey}'` }
+      });
     });
   });
 });

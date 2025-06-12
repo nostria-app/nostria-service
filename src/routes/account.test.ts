@@ -19,17 +19,9 @@ jest.mock('../services/AccountService');
 import AccountService from '../services/AccountService';
 
 import app from '../index';
-import { generateNIP98 } from '../helpers/testHelper';
+import { generateNIP98, testAccount } from '../helpers/testHelper';
 
 const accountService = AccountService as jest.Mocked<typeof AccountService>;
-
-const testAccount = (partial?: { pubkey?: string, email?: string }) => ({
-  pubkey: 'npub1test123456789',
-  email: 'test@email.com',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  ...partial,
-});
 
 describe('Account API', () => {
   let account: any;
@@ -267,11 +259,12 @@ describe('Account API', () => {
         .expect(401);
     });
 
-    test('should update account email when authenticated', async () => {
+    test('should update account details when authenticated', async () => {
       const currentAccount = testAccount({ pubkey: testAuth.npub });
       const updatedAccount = {
         ...currentAccount,
         email: 'new@example.com',
+        username: 'bob',
         updatedAt: new Date()
       };
 
@@ -281,10 +274,9 @@ describe('Account API', () => {
       const response = await request(app)
         .put('/api/account')
         .set('Authorization', `Nostr ${testAuth.token}`)
-        .send({ email: 'new@example.com' });
+        .send({ email: 'new@example.com', username: 'bob' });
 
       expect(response.status).toBe(200);
-
       expect(response.body).toHaveProperty('success', true);
       expect(response.body).toHaveProperty('account', {
         ...updatedAccount,
@@ -295,11 +287,25 @@ describe('Account API', () => {
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
       expect(accountService.updateAccount).toHaveBeenCalledWith({
         ...currentAccount,
+        username: 'bob',
         email: 'new@example.com',
       });
     });
 
-    test('should keep existing email if no new email provided', async () => {
+    test('should now allow to set username which is already taken', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      accountService.updateAccount.mockRejectedValueOnce({ message: 'Username is already taken' });
+      accountService.getAccount.mockResolvedValueOnce(currentAccount);
+
+      const response = await request(app)
+        .put('/api/account')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ email: 'new@example.com', username: 'bob' });
+
+      expect(response.status).toBe(409);
+    });
+
+    test('should keep existing details if updated weren\'t provided', async () => {
       const currentAccount = testAccount({ pubkey: testAuth.npub });
       const updatedAccount = {
         ...currentAccount,

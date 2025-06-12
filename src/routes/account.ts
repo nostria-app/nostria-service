@@ -98,7 +98,7 @@ router.get('/:pubkey', queryAccountRateLimit, async (req: Request, res: Response
 
     // Get user profile
     const account = await accountService.getAccount(targetPubkey);
-    
+
     if (!account) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -152,31 +152,37 @@ router.get('/', authUser, async (req: Request, res: Response) => {
  */
 router.put('/', authUser, async (req: Request, res: Response) => {
   try {
-    
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
 
-    const { email } = req.body;
+    const { email, username } = req.body;
 
     // Get current account
     const currentAccount = await accountService.getAccount(pubkey);
     if (!currentAccount) {
       return res.status(404).json({ error: 'Account not found' });
     }
-    
-    // Update account with new data
-    const updatedAccount = await accountService.updateAccount({
-      ...currentAccount,
-      email: email ?? currentAccount.email,
-    });
-    
-    return res.json({
-      success: true,
-      account: updatedAccount,
-    });
+
+    try {
+      // Update account with new data
+      const updatedAccount = await accountService.updateAccount({
+        ...currentAccount,
+        email: email ?? currentAccount.email,
+        username: username ?? currentAccount.username,
+      });
+
+      return res.json({
+        success: true,
+        account: updatedAccount,
+      });
+    } catch (error: any) {
+      if (error.message === 'Username is already taken') {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
+      throw error;
+    }
 
   } catch (error: any) {
-    console.log(error,'!!')
     logger.error(`Update account error for ${req.authenticatedPubkey || 'unknown'}: ${error.message}`);
     return res.status(500).json({ error: 'Failed to update account information' });
   }
