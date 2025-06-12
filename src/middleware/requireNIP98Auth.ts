@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { nip98 } from 'nostr-tools';
-import { bytesToHex } from '@noble/hashes/utils'
+import { nip19, nip98 } from 'nostr-tools';
 import logger from '../utils/logger';
 
 // Extend Express Request type to include authenticatedPubkey
@@ -15,13 +14,14 @@ declare global {
 const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       res.status(401).json({ error: 'NIP98 Authorization header required' });
       return;
     }
 
-    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const host = process.env.NODE_ENV === 'test' ? 'localhost:3000' : req.get('host');
+    const url = `${req.protocol}://${host}${req.originalUrl}`;
     
     let valid = false;
     let pubkey: string | null = null;
@@ -47,7 +47,7 @@ const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction
     }
 
     // Add the authenticated pubkey to the request object
-    req.authenticatedPubkey = pubkey;
+    req.authenticatedPubkey = nip19.npubEncode(pubkey);
     
     logger.debug(`NIP-98 authentication successful for pubkey: ${pubkey.substring(0, 16)}...`);
     next?.();

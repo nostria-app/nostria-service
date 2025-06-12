@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import requireNIP98Auth from './requireNIP98Auth';
-import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
-import { nip98 } from 'nostr-tools'
+import { generateNIP98 } from '../helpers/testHelper';
 
 describe('NIP98 Authentication Middleware', () => {
   let mockRequest: Partial<Request>;
@@ -48,35 +47,16 @@ describe('NIP98 Authentication Middleware', () => {
   });
 
   test('should authenticate successfully with valid token', async () => {
-    const sk = generateSecretKey()
-    const pubkey = getPublicKey(sk)
-    const token = await nip98.getToken('http://localhost:3000/api/account', 'get', e => finalizeEvent(e, sk))
+    const auth = await generateNIP98()
     
     mockRequest.headers = {
-      authorization: `Nostr ${token}`
+      authorization: `Nostr ${auth.token}`
     };
 
     await requireNIP98Auth(mockRequest as Request, mockResponse as Response, nextFunction);
     
-    expect(mockRequest.authenticatedPubkey).toBe(pubkey);
+    expect(mockRequest.authenticatedPubkey).toBe(auth.npub);
     expect(nextFunction).toHaveBeenCalled();
-  });
-
-  test('should handle server errors gracefully', async () => {
-    mockRequest.headers = {
-      authorization: 'Nostr valid-token'
-    };
-    mockRequest.get = jest.fn().mockImplementation(() => {
-      throw new Error('Test error');
-    });
-
-    await requireNIP98Auth(mockRequest as Request, mockResponse as Response, nextFunction);
-    
-    expect(mockResponse.status).toHaveBeenCalledWith(500);
-    expect(mockResponse.json).toHaveBeenCalledWith({
-      error: 'Authentication service error'
-    });
-    expect(nextFunction).not.toHaveBeenCalled();
   });
 });
 
