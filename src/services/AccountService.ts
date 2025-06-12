@@ -36,6 +36,21 @@ class AccountService extends BaseTableStorageService<Account> {
     return account;
   }
 
+  async updateAccount(account: Account): Promise<Account> {
+    const updated: Account = {
+      ...account,
+      updatedAt: new Date()
+    };
+
+    await this.tableClient.upsertEntity({
+      partitionKey: 'account',
+      rowKey: account.pubkey,
+      ...updated,
+    }, 'Replace');
+
+    return updated;
+  }
+
   async getAccount(pubkey: string): Promise<Account | null> {
     const entity = await this.getEntity('account', pubkey)
     return entity ? toAccount(entity) : null

@@ -21,10 +21,6 @@ import AccountService from '../services/AccountService';
 import app from '../index';
 import { generateNIP98 } from '../helpers/testHelper';
 
-jest.mock('../middleware/requireNIP98Auth', () => jest.fn((req, res, next) => next()));
-import requireNIP98AuthMiddleware from '../middleware/requireNIP98Auth';
-
-const requireNIP98Auth = requireNIP98AuthMiddleware as jest.MockedFn<typeof requireNIP98AuthMiddleware>;
 const accountService = AccountService as jest.Mocked<typeof AccountService>;
 
 const testAccount = (partial?: { pubkey?: string, email?: string }) => ({
@@ -35,12 +31,12 @@ const testAccount = (partial?: { pubkey?: string, email?: string }) => ({
   ...partial,
 });
 
-describe('Account Public API', () => {
+describe('Account API', () => {
   let account: any;
 
   beforeEach(() => {
     account = testAccount()
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   describe('GET /api/account/:pubkey', () => {
@@ -169,7 +165,7 @@ describe('Account Public API', () => {
     });
 
     test('should handle server errors gracefully', async () => {
-      accountService.getAccount.mockRejectedValueOnce(new Error('Database error'));
+      accountService.getAccount.mockRejectedValueOnce(new Error('Database error 1'));
 
       await request(app)
         .post('/api/account')
@@ -204,7 +200,6 @@ describe('Account Public API', () => {
 
   describe('GET /api/account', () => {
     test('should return 401 if not authenticated', async () => {
-      requireNIP98Auth.mockImplementationOnce(async (req, res, next) => { res.status(401).end() })
       await request(app)
         .get('/api/account')
         .expect(401);
@@ -214,10 +209,6 @@ describe('Account Public API', () => {
       const testAuth = await generateNIP98();
       account = testAccount({ pubkey: testAuth.npub })
       accountService.getAccount.mockResolvedValueOnce(account);
-      requireNIP98Auth.mockImplementationOnce(async (req, res, next) => { 
-        req.authenticatedPubkey = testAuth.npub
-        next?.()
-      });
 
       const response = await request(app)
         .get('/api/account')
@@ -239,10 +230,6 @@ describe('Account Public API', () => {
       // setup auth
       const testAuth = await generateNIP98();
       account = testAccount({ pubkey: testAuth.npub })
-      requireNIP98Auth.mockImplementationOnce(async (req, res, next) => { 
-        req.authenticatedPubkey = testAuth.npub
-        next?.()
-      });
 
       // make service return null for a pubkey
       accountService.getAccount.mockResolvedValueOnce(null);
@@ -256,13 +243,113 @@ describe('Account Public API', () => {
     });
 
     test('should handle server errors gracefully', async () => {
-      accountService.getAccount.mockRejectedValueOnce(new Error('Database error'));
+      const testAuth = await generateNIP98();
+      accountService.getAccount.mockRejectedValueOnce(new Error('Database error 2'));
 
       await request(app)
         .get('/api/account')
-        .set('Authorization', 'Bearer test-token')
-        .set('X-Nostr-Auth', 'test-auth')
+        .set('Authorization', `Nostr ${testAuth.token}`)
         .expect(500);
+    });
+  });
+
+  describe('PUT /api/account', () => {
+    let testAuth: any;
+
+    beforeAll(async () => {
+      testAuth = await generateNIP98('PUT');
+    })
+
+    test('should return 401 if not authenticated', async () => {
+      await request(app)
+        .put('/api/account')
+        .send({ email: 'new@example.com' })
+        .expect(401);
+    });
+
+    test('should update account email when authenticated', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      const updatedAccount = {
+        ...currentAccount,
+        email: 'new@example.com',
+        updatedAt: new Date()
+      };
+
+      accountService.getAccount.mockResolvedValueOnce(currentAccount);
+      accountService.updateAccount.mockResolvedValueOnce(updatedAccount);
+
+      const response = await request(app)
+        .put('/api/account')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ email: 'new@example.com' });
+
+      expect(response.status).toBe(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('account', {
+        ...updatedAccount,
+        createdAt: updatedAccount.createdAt.toISOString(),
+        updatedAt: updatedAccount.updatedAt.toISOString(),
+      });
+
+      expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
+      expect(accountService.updateAccount).toHaveBeenCalledWith({
+        ...currentAccount,
+        email: 'new@example.com',
+      });
+    });
+
+    test('should keep existing email if no new email provided', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      const updatedAccount = {
+        ...currentAccount,
+        updatedAt: new Date()
+      };
+
+      accountService.getAccount.mockResolvedValueOnce(currentAccount);
+      accountService.updateAccount.mockResolvedValueOnce(updatedAccount);
+
+      const response = await request(app)
+        .put('/api/account')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({})
+        .expect(200);
+
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('account', {
+        ...updatedAccount,
+        createdAt: updatedAccount.createdAt.toISOString(),
+        updatedAt: updatedAccount.updatedAt.toISOString(),
+      });
+
+      expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
+      expect(accountService.updateAccount).toHaveBeenCalledWith(currentAccount);
+    });
+
+    test('should return 404 if account not found', async () => {
+      accountService.getAccount.mockResolvedValueOnce(null);
+
+      await request(app)
+        .put('/api/account')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ email: 'new@example.com' })
+        .expect(404);
+
+      expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
+      expect(accountService.updateAccount).not.toHaveBeenCalled();
+    });
+
+    test('should handle server errors gracefully', async () => {
+      accountService.getAccount.mockRejectedValueOnce(new Error('Database error 3'));
+
+      await request(app)
+        .put('/api/account')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ email: 'new@example.com' })
+        .expect(500);
+
+      expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
+      expect(accountService.updateAccount).not.toHaveBeenCalled();
     });
   });
 });

@@ -115,6 +115,80 @@ describe("AccountService", () => {
       expect(mockTableClient.getEntity).toHaveBeenCalledWith("account", pubkey);
     });
   });
+
+  describe("updateAccount", () => {
+    it("should update an existing account and return the updated account", async () => {
+      const originalDate = new Date("2024-01-01");
+      const existingAccount: Account = {
+        pubkey: "test-pubkey",
+        email: "old@example.com",
+        createdAt: originalDate,
+        updatedAt: originalDate,
+      };
+
+      const updatedAccount: Account = {
+        ...existingAccount,
+        email: "new@example.com",
+      };
+
+      const result = await accountService.updateAccount(updatedAccount);
+
+      // Verify the result has the updated email and a new updatedAt timestamp
+      expect(result).toEqual({
+        ...updatedAccount,
+        updatedAt: expect.any(Date),
+      });
+      expect(result.updatedAt).not.toEqual(originalDate);
+      expect(result.updatedAt.getTime()).toBeGreaterThan(originalDate.getTime());
+
+      // Verify the upsertEntity was called with correct parameters
+      expect(mockTableClient.upsertEntity).toHaveBeenCalledWith(
+        {
+          partitionKey: "account",
+          rowKey: updatedAccount.pubkey,
+          ...updatedAccount,
+          updatedAt: expect.any(Date),
+        },
+        "Replace"
+      );
+    });
+
+    it("should update an account with optional fields", async () => {
+      const originalDate = new Date("2024-01-01");
+      const existingAccount: Account = {
+        pubkey: "test-pubkey",
+        email: "test@example.com",
+        createdAt: originalDate,
+        updatedAt: originalDate,
+      };
+
+      const updatedAccount: Account = {
+        ...existingAccount,
+        lastLoginDate: new Date(),
+      };
+
+      const result = await accountService.updateAccount(updatedAccount);
+
+      // Verify the result has the new lastLoginDate and a new updatedAt timestamp
+      expect(result).toEqual({
+        ...updatedAccount,
+        updatedAt: expect.any(Date),
+      });
+      expect(result.updatedAt).not.toEqual(originalDate);
+      expect(result.updatedAt.getTime()).toBeGreaterThan(originalDate.getTime());
+
+      // Verify the upsertEntity was called with correct parameters
+      expect(mockTableClient.upsertEntity).toHaveBeenCalledWith(
+        {
+          partitionKey: "account",
+          rowKey: updatedAccount.pubkey,
+          ...updatedAccount,
+          updatedAt: expect.any(Date),
+        },
+        "Replace"
+      );
+    });
+  });
 });
 
 

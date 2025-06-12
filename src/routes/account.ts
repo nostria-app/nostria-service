@@ -146,4 +146,40 @@ router.get('/', authUser, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Update own account information
+ * @route PUT /api/account
+ */
+router.put('/', authUser, async (req: Request, res: Response) => {
+  try {
+    
+    const pubkey = req.authenticatedPubkey;
+    assert(pubkey, "Pubkey should be present for authenticated user");
+
+    const { email } = req.body;
+
+    // Get current account
+    const currentAccount = await accountService.getAccount(pubkey);
+    if (!currentAccount) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    
+    // Update account with new data
+    const updatedAccount = await accountService.updateAccount({
+      ...currentAccount,
+      email: email ?? currentAccount.email,
+    });
+    
+    return res.json({
+      success: true,
+      account: updatedAccount,
+    });
+
+  } catch (error: any) {
+    console.log(error,'!!')
+    logger.error(`Update account error for ${req.authenticatedPubkey || 'unknown'}: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to update account information' });
+  }
+});
+
 export default router; 
