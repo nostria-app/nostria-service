@@ -1,5 +1,4 @@
-import { TableEntityResult } from "@azure/data-tables";
-import BaseTableStorageService, { TableEntity } from "./BaseTableStorageService";
+import BaseTableStorageService from "./BaseTableStorageService";
 
 export interface Account {
   pubkey: string;
@@ -11,8 +10,6 @@ export interface Account {
 }
 
 type CreateAccountDto = Pick<Account, 'pubkey' | 'email'>
-
-const toAccount = ({ rowKey, partitionKey, ...data }: TableEntityResult<Account>): Account => data;
 
 class AccountService extends BaseTableStorageService<Account> {
   constructor() {
@@ -45,11 +42,7 @@ class AccountService extends BaseTableStorageService<Account> {
         ? `username eq '${username}' and rowKey ne '${excludePubkey}'`
         : `username eq '${username}'`;
 
-      const iterator = this.tableClient.listEntities({ queryOptions: { filter } });
-      const entities = [];
-      for await (const entity of iterator) {
-        entities.push(entity);
-      }
+      const entities = await this.queryEntities(filter);
       return entities.length > 0;
     } catch (error) {
       throw new Error(`Failed to check username uniqueness: ${(error as Error).message}`);
@@ -80,8 +73,7 @@ class AccountService extends BaseTableStorageService<Account> {
   }
 
   async getAccount(pubkey: string): Promise<Account | null> {
-    const entity = await this.getEntity('account', pubkey)
-    return entity ? toAccount(entity) : null
+    return this.getEntity('account', pubkey)
   }
 }
 

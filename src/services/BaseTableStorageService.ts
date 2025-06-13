@@ -1,11 +1,6 @@
-import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult } from "@azure/data-tables";
+import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult, TableEntity } from "@azure/data-tables";
 import { DefaultAzureCredential } from "@azure/identity";
 import logger from "../utils/logger";
-
-export type TableEntity<T> = {
-  partitionKey: string;
-  rowKey: string;
-} & T;
 
 export class BaseTableStorageService<T extends object> {
   protected tableName: string;
@@ -63,7 +58,7 @@ export class BaseTableStorageService<T extends object> {
     }
   }
 
-  protected async upsertEntity(partitionKey: string, rowKey: string, data: T): Promise<TableEntity<T>> {
+  protected async upsertEntity(partitionKey: string, rowKey: string, data: T): Promise<T> {
     const entity: TableEntity<T> = {
       partitionKey,
       rowKey,
@@ -72,17 +67,17 @@ export class BaseTableStorageService<T extends object> {
 
     try {
       await this.tableClient.upsertEntity<T>(entity, "Replace");
-      return entity;
+      return data;
     } catch (error: any) {
       logger.error(`Error upserting entity in ${this.tableName}: ${error.message}`);
       throw error;
     }
   }
 
-  protected async getEntity(partitionKey: string, rowKey: string): Promise<TableEntityResult<T> | null> {
+  protected async getEntity(partitionKey: string, rowKey: string): Promise<T | null> {
     try {
       const entity = await this.tableClient.getEntity<T>(partitionKey, rowKey);
-      return entity;
+      return this.toObject(entity);
     } catch (error: any) {
       if (error.statusCode === 404) {
         return null;
@@ -92,15 +87,15 @@ export class BaseTableStorageService<T extends object> {
     }
   }
 
-  protected async queryEntities(query: string): Promise<TableEntityResult<T>[]> {
+  protected async queryEntities(query: string): Promise<T[]> {
     try {
       const iterator = this.tableClient.listEntities<T>({
         queryOptions: { filter: query } as TableEntityQueryOptions
       });
 
-      const entities: TableEntityResult<T>[] = [];
+      const entities: T[] = [];
       for await (const entity of iterator) {
-        entities.push(entity);
+        entities.push(this.toObject(entity));
       }
       return entities;
     } catch (error: any) {
@@ -118,6 +113,10 @@ export class BaseTableStorageService<T extends object> {
     }
   }
 
+  protected toObject(entity: TableEntityResult<T>): T {
+    const { partitionKey, rowKey, etag, timestamp, ...data} = entity;
+    return data as T;
+  }
 }
 
 export default BaseTableStorageService; 
