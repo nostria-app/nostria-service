@@ -47,7 +47,7 @@ describe("AccountService", () => {
       const pubkey = "test-pubkey";
 
 
-      const result = await accountService.addAccount({ pubkey, email: null });
+      const result = await accountService.addAccount({ pubkey });
 
       // Verify the result
       expect(result).toEqual({

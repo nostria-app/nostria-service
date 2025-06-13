@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import requireNIP98Auth from './requireNIP98Auth';
 import { generateNIP98 } from '../helpers/testHelper';
+import { NIP98AuthenticatedRequest } from '../routes/types';
 
 describe('NIP98 Authentication Middleware', () => {
   let mockRequest: Partial<Request>;
@@ -55,7 +56,7 @@ describe('NIP98 Authentication Middleware', () => {
 
     await requireNIP98Auth(mockRequest as Request, mockResponse as Response, nextFunction);
     
-    expect(mockRequest.authenticatedPubkey).toBe(auth.npub);
+    expect((mockRequest as NIP98AuthenticatedRequest).authenticatedPubkey).toBe(auth.npub);
     expect(nextFunction).toHaveBeenCalled();
   });
 });
