@@ -1,3 +1,4 @@
+import { TableEntityResult } from "@azure/data-tables";
 import BaseTableStorageService, { TableEntity } from "./BaseTableStorageService";
 
 export interface Account {
@@ -11,7 +12,7 @@ export interface Account {
 
 type CreateAccountDto = Pick<Account, 'pubkey' | 'email'>
 
-const toAccount = ({ rowKey, partitionKey, ...data }: TableEntity<Account>): Account => data;
+const toAccount = ({ rowKey, partitionKey, ...data }: TableEntityResult<Account>): Account => data;
 
 class AccountService extends BaseTableStorageService<Account> {
   constructor() {

@@ -1,4 +1,4 @@
-import { TableClient, TableServiceClient, TableEntityQueryOptions } from "@azure/data-tables";
+import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult } from "@azure/data-tables";
 import { DefaultAzureCredential } from "@azure/identity";
 import logger from "../utils/logger";
 
@@ -7,7 +7,7 @@ export type TableEntity<T> = {
   rowKey: string;
 } & T;
 
-export class BaseTableStorageService<T> {
+export class BaseTableStorageService<T extends object> {
   protected tableName: string;
   protected serviceClient!: TableServiceClient;
   protected tableClient!: TableClient;
@@ -71,7 +71,7 @@ export class BaseTableStorageService<T> {
     };
 
     try {
-      await this.tableClient.upsertEntity(entity, "Replace");
+      await this.tableClient.upsertEntity<T>(entity, "Replace");
       return entity;
     } catch (error: any) {
       logger.error(`Error upserting entity in ${this.tableName}: ${error.message}`);
@@ -79,10 +79,10 @@ export class BaseTableStorageService<T> {
     }
   }
 
-  protected async getEntity(partitionKey: string, rowKey: string): Promise<TableEntity<T> | null> {
+  protected async getEntity(partitionKey: string, rowKey: string): Promise<TableEntityResult<T> | null> {
     try {
-      const entity = await this.tableClient.getEntity(partitionKey, rowKey);
-      return entity as TableEntity<T>;
+      const entity = await this.tableClient.getEntity<T>(partitionKey, rowKey);
+      return entity;
     } catch (error: any) {
       if (error.statusCode === 404) {
         return null;
@@ -92,15 +92,15 @@ export class BaseTableStorageService<T> {
     }
   }
 
-  protected async queryEntities(query: string): Promise<TableEntity<T>[]> {
+  protected async queryEntities(query: string): Promise<TableEntityResult<T>[]> {
     try {
-      const iterator = this.tableClient.listEntities({
+      const iterator = this.tableClient.listEntities<T>({
         queryOptions: { filter: query } as TableEntityQueryOptions
       });
 
-      const entities: TableEntity<T>[] = [];
+      const entities: TableEntityResult<T>[] = [];
       for await (const entity of iterator) {
-        entities.push(entity as TableEntity<T>);
+        entities.push(entity);
       }
       return entities;
     } catch (error: any) {
