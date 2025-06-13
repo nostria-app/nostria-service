@@ -31,7 +31,7 @@ describe('Account API', () => {
     jest.resetAllMocks();
   });
 
-  describe('GET /api/account/:pubkey', () => {
+  describe('GET /api/account/:pubkeyOrUsername', () => {
     test('should check if pubkey is not available', async () => {
       accountService.getAccount.mockResolvedValueOnce(account)
 
@@ -56,6 +56,33 @@ describe('Account API', () => {
         .expect(404);
 
       expect(accountService.getAccount).toHaveBeenCalledWith(account.pubkey);
+    });
+
+    test('should check if username is not available', async () => {
+      accountService.getAccountByUsername.mockResolvedValueOnce(account)
+
+      const response = await request(app)
+        .get(`/api/account/${account.username}`)
+        .expect(200);
+
+      expect(accountService.getAccountByUsername).toHaveBeenCalledWith(account.username)
+      expect(response.body).toEqual({
+        pubkey: account.pubkey,
+        signupDate: account.createdAt.toISOString(),
+        tier: 'free',
+        isActive: true,
+      });
+    });
+
+    test('should check if username is available', async () => {
+      accountService.getAccountByUsername.mockResolvedValueOnce(null)
+
+      await request(app)
+        .get(`/api/account/${account.username}`)
+        .expect(404);
+
+      expect(accountService.getAccount).not.toHaveBeenCalled()
+      expect(accountService.getAccountByUsername).toHaveBeenCalledWith(account.username);
     });
 
     test('should return 400 for invalid pubkey format', async () => {

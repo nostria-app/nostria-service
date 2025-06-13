@@ -1,4 +1,4 @@
-import BaseTableStorageService from "./BaseTableStorageService";
+import BaseTableStorageService, { escapeODataValue } from "./BaseTableStorageService";
 
 export interface Account {
   pubkey: string;
@@ -39,8 +39,8 @@ class AccountService extends BaseTableStorageService<Account> {
     try {
       // Query for any account with this username, excluding the current account if specified
       const filter = excludePubkey
-        ? `username eq '${username}' and rowKey ne '${excludePubkey}'`
-        : `username eq '${username}'`;
+        ? `username eq ${escapeODataValue(username)} and rowKey ne ${escapeODataValue(excludePubkey)}`
+        : `username eq ${escapeODataValue(username)}`;
 
       const entities = await this.queryEntities(filter);
       return entities.length > 0;
@@ -74,6 +74,18 @@ class AccountService extends BaseTableStorageService<Account> {
 
   async getAccount(pubkey: string): Promise<Account | null> {
     return this.getEntity('account', pubkey)
+  }
+
+  async getAccountByUsername(username: string): Promise<Account | null> {
+    try {
+      // Ineffective query.
+      // TODO: either needs a second row `{ rowKey: username, pubkey }` and 
+      // then a second query or move to Cosmos DB with secondary index on `username`
+      const entities = await this.queryEntities(`username eq ${escapeODataValue(username)}`);
+      return entities.length > 0 ? entities[0] : null;
+    } catch (error) {
+      throw new Error(`Failed to get account by username: ${(error as Error).message}`);
+    }
   }
 }
 

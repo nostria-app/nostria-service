@@ -8,7 +8,7 @@ describe("AccountService", () => {
 
   beforeEach(() => {
     // Clear all mocks before each test
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
     // Get the mocked tableClient from the BaseTableStorageService instance
     mockTableClient = (accountService as any).tableClient;
@@ -286,6 +286,58 @@ describe("AccountService", () => {
       expect(result).toBe(false);
       expect(mockTableClient.listEntities).toHaveBeenCalledWith({
         queryOptions: { filter: `username eq '${username}' and rowKey ne '${currentPubkey}'` }
+      });
+    });
+  });
+
+  describe("getAccountByUsername", () => {
+    it("should return an account when username exists", async () => {
+      const username = "testuser";
+      const mockAccount: Account = {
+        pubkey: "test-pubkey",
+        email: "test@example.com",
+        username,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const mockEntity = {
+        partitionKey: "account",
+        rowKey: mockAccount.pubkey,
+        ...mockAccount,
+      };
+
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([mockEntity]));
+
+      const result = await accountService.getAccountByUsername(username);
+
+      expect(result).toEqual(mockAccount);
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}'` }
+      });
+    });
+
+    it("should return null when username does not exist", async () => {
+      const username = "nonexistentuser";
+      mockTableClient.listEntities.mockReturnValueOnce(createMockIterator([]));
+
+      const result = await accountService.getAccountByUsername(username);
+
+      expect(result).toBeNull();
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}'` }
+      });
+    });
+
+    it("should throw error when query fails", async () => {
+      const username = "testuser";
+      mockTableClient.listEntities.mockImplementationOnce(() => { throw new Error("Database error"); });
+
+      await expect(accountService.getAccountByUsername(username)).rejects.toThrow(
+        "Failed to get account by username: Database error"
+      );
+      expect(mockTableClient.listEntities).toHaveBeenCalledWith({
+        queryOptions: { filter: `username eq '${username}'` }
       });
     });
   });

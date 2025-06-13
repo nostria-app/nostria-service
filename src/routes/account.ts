@@ -5,6 +5,7 @@ import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import accountService, { Account } from '../services/AccountService';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
+import { isValidNpub } from '../utils/nostr';
 
 /**
  * @openapi
@@ -129,7 +130,7 @@ type AddAccountResponse = Response<AccountDto | ErrorBody>
 type GetAccountRequest = NIP98AuthenticatedRequest;
 type GetAccountResponse = Response<AccountDto | ErrorBody>
 
-type GetPublicAccountRequest = Request<{ pubkey: string}, any, any, any>
+type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string}, any, any, any>
 type GetPublicAccountResponse = Response<PublicAccountDto | ErrorBody>
 
 /**
@@ -245,7 +246,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
 /**
  * @openapi
- * /account/{pubkey}:
+ * /account/{pubkeyOrUsername}:
  *   get:
  *     operationId: "GetPublicAccount"
  *     summary: Get public account information
@@ -253,12 +254,12 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
  *     tags:
  *       - Account
  *     parameters:
- *       - name: pubkey
+ *       - name: pubkeyOrUsername
  *         in: path
  *         required: true
  *         schema:
  *           type: string
- *         description: User's public key
+ *         description: User's public key in npub format or a username
  *     responses:
  *       '200':
  *         description: Public account information retrieved successfully
@@ -291,16 +292,20 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:pubkey', queryAccountRateLimit, async (req: GetPublicAccountRequest, res: GetPublicAccountResponse) => {
+router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAccountRequest, res: GetPublicAccountResponse) => {
   try {
-    const targetPubkey = req.params.pubkey;
+    const needle = req.params.pubkeyOrUsername;
 
-    if (!targetPubkey) {
-      return res.status(400).json({ error: 'Public key is required' });
+    if (!needle) {
+      return res.status(400).json({ error: 'Public key or username is required' });
     }
 
-    // Get user profile
-    const account = await accountService.getAccount(targetPubkey);
+    let account: Account | null;
+    if (isValidNpub(needle)) {
+      account = await accountService.getAccount(needle);
+    } else {
+      account = await accountService.getAccountByUsername(needle);
+    }
 
     if (!account) {
       return res.status(404).json({ error: 'User not found' });
