@@ -2,7 +2,7 @@ import BaseTableStorageService, { TableEntity } from "./BaseTableStorageService"
 
 export interface Account {
   pubkey: string;
-  email: string | null;
+  email?: string;
   username?: string;
   createdAt: Date;
   updatedAt: Date;

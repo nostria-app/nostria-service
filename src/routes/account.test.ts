@@ -40,13 +40,12 @@ describe('Account API', () => {
         .expect(200);
 
       expect(accountService.getAccount).toHaveBeenCalledWith(account.pubkey)
-      expect(response.body).toHaveProperty('profile', {
+      expect(response.body).toEqual({
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
         tier: 'free',
         isActive: true,
       });
-      expect(response.body).toHaveProperty('success', true);
     });
 
     test('should check if pubkey is available', async () => {
@@ -85,7 +84,12 @@ describe('Account API', () => {
   describe('POST /api/account', () => {
     test('should create new account successfully', async () => {
       accountService.getAccount.mockResolvedValueOnce(null);
-      accountService.addAccount.mockResolvedValueOnce(account);
+      accountService.addAccount.mockResolvedValueOnce({
+        pubkey: account.pubkey,
+        email: account.email,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
       const response = await request(app)
         .post('/api/account')
@@ -100,11 +104,10 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         email: account.email
       });
-      expect(response.body).toHaveProperty('success', true);
-      expect(response.body).toHaveProperty('account', {
-        ...account,
-        createdAt: account.createdAt.toISOString(),
-        updatedAt: account.updatedAt.toISOString(),
+      expect(response.body).toEqual({
+        email: account.email,
+        pubkey: account.pubkey,
+        signupDate: account.createdAt.toISOString(),
       });
     });
 
@@ -116,7 +119,7 @@ describe('Account API', () => {
     });
 
     test('should create new account with pubkey only', async () => {
-      account = testAccount({ email: undefined })
+      account = testAccount({ username: undefined, email: undefined })
       accountService.getAccount.mockResolvedValueOnce(null);
       accountService.addAccount.mockResolvedValueOnce(account);
 
@@ -132,12 +135,10 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         email: undefined,
       });
-      expect(response.body).toHaveProperty('success', true);
-      expect(response.body).toHaveProperty('account', {
-        ...account,
-        email: undefined,
-        createdAt: account.createdAt.toISOString(),
-        updatedAt: account.updatedAt.toISOString(),
+      expect(response.body).toEqual({
+        email: account.email,
+        pubkey: account.pubkey,
+        signupDate: account.createdAt.toISOString(),
       });
     });
 
@@ -207,12 +208,11 @@ describe('Account API', () => {
         .set('Authorization', `Nostr ${testAuth.token}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('success', true);
-      expect(response.body).toHaveProperty('account', {
-        ...account,
+      expect(response.body).toEqual({
+        pubkey: account.pubkey,
+        username: account.username,
         email: account.email,
-        createdAt: account.createdAt.toISOString(),
-        updatedAt: account.updatedAt.toISOString(),
+        signupDate: account.createdAt.toISOString(),
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
@@ -277,11 +277,11 @@ describe('Account API', () => {
         .send({ email: 'new@example.com', username: 'bob' });
 
       expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('success', true);
-      expect(response.body).toHaveProperty('account', {
-        ...updatedAccount,
-        createdAt: updatedAccount.createdAt.toISOString(),
-        updatedAt: updatedAccount.updatedAt.toISOString(),
+      expect(response.body).toEqual({
+        pubkey: updatedAccount.pubkey,
+        username: updatedAccount.username,
+        email: updatedAccount.email,
+        signupDate: updatedAccount.createdAt.toISOString(),
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
@@ -321,11 +321,11 @@ describe('Account API', () => {
         .send({})
         .expect(200);
 
-      expect(response.body).toHaveProperty('success', true);
-      expect(response.body).toHaveProperty('account', {
-        ...updatedAccount,
-        createdAt: updatedAccount.createdAt.toISOString(),
-        updatedAt: updatedAccount.updatedAt.toISOString(),
+      expect(response.body).toEqual({
+        pubkey: updatedAccount.pubkey,
+        username: updatedAccount.username,
+        email: updatedAccount.email,
+        signupDate: updatedAccount.createdAt.toISOString(),
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);

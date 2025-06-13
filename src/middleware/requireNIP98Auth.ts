@@ -1,15 +1,8 @@
 import { NextFunction, Request, Response } from 'express';
 import { nip19, nip98 } from 'nostr-tools';
 import logger from '../utils/logger';
+import { NIP98AuthenticatedRequest } from '../routes/types';
 
-// Extend Express Request type to include authenticatedPubkey
-declare global {
-  namespace Express {
-    interface Request {
-      authenticatedPubkey?: string;
-    }
-  }
-}
 
 const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction): Promise<void> => {
   try {
@@ -47,7 +40,7 @@ const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction
     }
 
     // Add the authenticated pubkey to the request object
-    req.authenticatedPubkey = nip19.npubEncode(pubkey);
+    (req as NIP98AuthenticatedRequest).authenticatedPubkey = nip19.npubEncode(pubkey);
     
     logger.debug(`NIP-98 authentication successful for pubkey: ${pubkey.substring(0, 16)}...`);
     next?.();

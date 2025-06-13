@@ -1,9 +1,11 @@
 import express, { Request, Response } from 'express';
+import assert from 'node:assert';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
-import accountService from '../services/AccountService';
-import assert from 'node:assert';
+import accountService, { Account } from '../services/AccountService';
+import { ErrorBody, NIP98AuthenticatedRequest } from './types';
+
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -33,30 +35,43 @@ const router = express.Router();
 // authenticated user
 const authUser = [authRateLimit, requireNIP98Auth];
 
-interface PublicProfile {
+interface PublicAccountDto {
   pubkey: string;
   signupDate: Date;
   tier: string;
   isActive: boolean;
 }
 
-interface AccountInfo {
+interface AccountDto {
   pubkey: string;
-  email: string | null;
-  signupDate: string;
-  lastLoginDate?: string;
-  status: string;
-  tier: string;
-  subscription: any;
-  recentPayments: any[];
-  totalNotificationsSent: number;
+  email?: string;
+  username?: string;
+  signupDate: Date;
+  lastLoginDate?: Date;
 }
 
-/**
- * Public endpoint for new user signups
- * @route POST /api/account
- */
-router.post('/', signupRateLimit, async (req: Request, res: Response) => {
+type AddAccountRequest = Request<{}, any, { pubkey: string, email?: string }, any>
+type AddAccountResponse = Response<AccountDto | ErrorBody>
+
+type GetAccountRequest = NIP98AuthenticatedRequest;
+type GetAccountResponse = Response<AccountDto | ErrorBody>
+
+type GetPublicAccountRequest = Request<{ pubkey: string}, any, any, any>
+type GetPublicAccountResponse = Response<PublicAccountDto | ErrorBody>
+
+type UpdateAccountRequest = NIP98AuthenticatedRequest<{}, any, Partial<Account>, any>
+type UpdateAccountResponse = Response<AccountDto | ErrorBody>
+
+const toAccountDto = ({ pubkey, email, username, createdAt, lastLoginDate }: Account): AccountDto => ({
+  pubkey,
+  email,
+  username,
+  signupDate: createdAt,
+  lastLoginDate,
+});
+
+
+router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
     const { pubkey, email } = req.body;
 
@@ -74,21 +89,15 @@ router.post('/', signupRateLimit, async (req: Request, res: Response) => {
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with email: ${email || 'none'}`);
 
-    return res.status(201).json({
-      success: true,
-      account
-    });
+    return res.status(201).json(toAccountDto(account));
   } catch (error: any) {
     logger.error(`Error during signup: ${error.message}`);
     return res.status(500).json({ error: 'Failed to register user' });
   }
 });
 
-/**
- * Public endpoint to get user profile
- * @route GET /api/account/:pubkey
- */
-router.get('/:pubkey', queryAccountRateLimit, async (req: Request, res: Response) => {
+
+router.get('/:pubkey', queryAccountRateLimit, async (req: GetPublicAccountRequest, res: GetPublicAccountResponse) => {
   try {
     const targetPubkey = req.params.pubkey;
 
@@ -104,28 +113,22 @@ router.get('/:pubkey', queryAccountRateLimit, async (req: Request, res: Response
     }
 
     // Public profile information
-    const publicProfile: PublicProfile = {
+    const publicProfile: PublicAccountDto = {
       pubkey: account.pubkey,
       signupDate: account.createdAt,
       tier: 'free',
       isActive: true,
     };
 
-    return res.status(200).json({
-      success: true,
-      profile: publicProfile
-    });
+    return res.status(200).json(publicProfile);
   } catch (error: any) {
     logger.error(`Error getting user profile: ${error.message}`);
     return res.status(500).json({ error: 'Failed to get user profile' });
   }
 });
 
-/**
- * Get own account information
- * @route GET /api/account
- */
-router.get('/', authUser, async (req: Request, res: Response) => {
+
+router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse) => {
   try {
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
@@ -135,10 +138,7 @@ router.get('/', authUser, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    return res.json({
-      success: true,
-      account,
-    });
+    return res.json(toAccountDto(account));
 
   } catch (error: any) {
     logger.error(`Get profile error for ${req.authenticatedPubkey || 'unknown'}: ${error.message}`);
@@ -146,11 +146,8 @@ router.get('/', authUser, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Update own account information
- * @route PUT /api/account
- */
-router.put('/', authUser, async (req: Request, res: Response) => {
+
+router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountResponse) => {
   try {
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
@@ -171,10 +168,7 @@ router.put('/', authUser, async (req: Request, res: Response) => {
         username: username ?? currentAccount.username,
       });
 
-      return res.json({
-        success: true,
-        account: updatedAccount,
-      });
+      return res.json(toAccountDto(updatedAccount));
     } catch (error: any) {
       if (error.message === 'Username is already taken') {
         return res.status(409).json({ error: 'Username is already taken' });
