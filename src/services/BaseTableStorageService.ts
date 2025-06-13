@@ -1,6 +1,22 @@
-import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult, TableEntity } from "@azure/data-tables";
+import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult, TableEntity, odata } from "@azure/data-tables";
 import { DefaultAzureCredential } from "@azure/identity";
 import logger from "../utils/logger";
+
+type ValueType = string | Date | boolean | number
+
+export const escapeODataValue = (value: ValueType): string => {
+  if (typeof value === "string") {
+    return `'${value.replace(/'/g, "''")}'`;
+  } else if (value instanceof Date) {
+    return `datetime'${value.toISOString()}'`;
+  } else if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  } else if (typeof value === "number") {
+    return value.toString();
+  } else {
+    throw new Error("Unsupported filter value type");
+  }
+}
 
 export class BaseTableStorageService<T extends object> {
   protected tableName: string;
