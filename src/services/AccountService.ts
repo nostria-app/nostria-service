@@ -78,14 +78,8 @@ class AccountService extends BaseTableStorageService<Account> {
 
   async getAccountByUsername(username: string): Promise<Account | null> {
     try {
-      const filter = `username eq '${username}'`;
-      const iterator = this.tableClient.listEntities<TableEntity<Account>>({ queryOptions: { filter } });
-      
-      for await (const entity of iterator) {
-        return toAccount(entity);
-      }
-      
-      return null;
+      const entities = await this.queryEntities(`username eq '${username}'`);      
+      return entities.length > 0 ? entities[0] : null;
     } catch (error) {
       throw new Error(`Failed to get account by username: ${(error as Error).message}`);
     }
