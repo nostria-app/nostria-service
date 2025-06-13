@@ -2,19 +2,26 @@ import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "no
 import { Account } from "../services/AccountService";
 
 export const generateNIP98 = async (method = 'GET') => {
-  const sk = generateSecretKey()
-  const pubkey = getPublicKey(sk)
-  const token = await nip98.getToken('http://localhost:3000/api/account', method, e => finalizeEvent(e, sk))
+  const keyPair = generateKeyPair()
+  const token = await nip98.getToken('http://localhost:3000/api/account', method, e => finalizeEvent(e, keyPair.privateKey))
   return {
-    privateKey: sk,
-    pubkey,
-    npub: nip19.npubEncode(pubkey),
+    ...keyPair,
     token,
   };
 };
 
+export const generateKeyPair = () => {
+  const sk = generateSecretKey()
+  const pubkey = getPublicKey(sk)
+  return {
+    privateKey: sk,
+    pubkey,
+    npub: nip19.npubEncode(pubkey),
+  }
+}
+
 export const testAccount = (partial?: { pubkey?: string, email?: string, username?: string }): Account => ({
-  pubkey: 'npub1test123456789',
+  pubkey: generateKeyPair().npub,
   email: 'test@email.com',
   username: 'bla',
   createdAt: new Date(),

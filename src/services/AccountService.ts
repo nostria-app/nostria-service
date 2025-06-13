@@ -75,6 +75,21 @@ class AccountService extends BaseTableStorageService<Account> {
   async getAccount(pubkey: string): Promise<Account | null> {
     return this.getEntity('account', pubkey)
   }
+
+  async getAccountByUsername(username: string): Promise<Account | null> {
+    try {
+      const filter = `username eq '${username}'`;
+      const iterator = this.tableClient.listEntities<TableEntity<Account>>({ queryOptions: { filter } });
+      
+      for await (const entity of iterator) {
+        return toAccount(entity);
+      }
+      
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to get account by username: ${(error as Error).message}`);
+    }
+  }
 }
 
 export default new AccountService();
