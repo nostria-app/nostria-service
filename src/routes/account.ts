@@ -6,6 +6,15 @@ import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import accountService, { Account } from '../services/AccountService';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 
+/**
+ * @openapi
+ * components:
+ *   securitySchemes:
+ *     NIP98Auth:
+ *       type: http
+ *       scheme: bearer
+ *       description: NIP-98 authentication using Nostr events
+ */
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -20,7 +29,6 @@ const queryAccountRateLimit = createRateLimit(
   'Too many signup attempts from this IP, please try again later.',
 );
 
-
 // Signup endpoints - very restrictive to prevent abuse
 const signupRateLimit = createRateLimit(
   60 * 60 * 1000, // 1 hour
@@ -28,13 +36,33 @@ const signupRateLimit = createRateLimit(
   'Too many signup attempts from this IP, please try again later.',
 );
 
-
 const router = express.Router();
 
 // combined middleware to be used for routes requiring
 // authenticated user
 const authUser = [authRateLimit, requireNIP98Auth];
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     PublicAccountDto:
+ *       type: object
+ *       properties:
+ *         pubkey:
+ *           type: string
+ *           description: User's public key
+ *         signupDate:
+ *           type: string
+ *           format: date-time
+ *           description: Account creation date
+ *         tier:
+ *           type: string
+ *           description: User's subscription tier
+ *         isActive:
+ *           type: boolean
+ *           description: Whether the account is active
+ */
 interface PublicAccountDto {
   pubkey: string;
   signupDate: Date;
@@ -42,6 +70,34 @@ interface PublicAccountDto {
   isActive: boolean;
 }
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     AccountDto:
+ *       type: object
+ *       properties:
+ *         pubkey:
+ *           type: string
+ *           description: User's public key
+ *         email:
+ *           type: string
+ *           nullable: true
+ *           description: User's email address
+ *         username:
+ *           type: string
+ *           nullable: true
+ *           description: User's username
+ *         signupDate:
+ *           type: string
+ *           format: date-time
+ *           description: Account creation date
+ *         lastLoginDate:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Last login date
+ */
 interface AccountDto {
   pubkey: string;
   email?: string;
@@ -50,6 +106,23 @@ interface AccountDto {
   lastLoginDate?: Date;
 }
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     AddAccountRequest:
+ *       type: object
+ *       required:
+ *         - pubkey
+ *       properties:
+ *         pubkey:
+ *           type: string
+ *           description: User's public key
+ *         email:
+ *           type: string
+ *           nullable: true
+ *           description: User's email address
+ */
 type AddAccountRequest = Request<{}, any, { pubkey: string, email?: string }, any>
 type AddAccountResponse = Response<AccountDto | ErrorBody>
 
@@ -59,8 +132,36 @@ type GetAccountResponse = Response<AccountDto | ErrorBody>
 type GetPublicAccountRequest = Request<{ pubkey: string}, any, any, any>
 type GetPublicAccountResponse = Response<PublicAccountDto | ErrorBody>
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     UpdateAccountRequest:
+ *       type: object
+ *       properties:
+ *         email:
+ *           type: string
+ *           nullable: true
+ *           description: User's email address
+ *         username:
+ *           type: string
+ *           nullable: true
+ *           description: User's username
+ */
 type UpdateAccountRequest = NIP98AuthenticatedRequest<{}, any, Partial<Account>, any>
 type UpdateAccountResponse = Response<AccountDto | ErrorBody>
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     Error:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *           description: Error message
+ */
 
 const toAccountDto = ({ pubkey, email, username, createdAt, lastLoginDate }: Account): AccountDto => ({
   pubkey,
@@ -70,7 +171,53 @@ const toAccountDto = ({ pubkey, email, username, createdAt, lastLoginDate }: Acc
   lastLoginDate,
 });
 
-
+/**
+ * @openapi
+ * /account:
+ *   post:
+ *     operationId: "AddAccount"
+ *     summary: Create a new account
+ *     description: Register a new user account
+ *     tags:
+ *       - Account
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AddAccountRequest'
+ *     responses:
+ *       '201':
+ *         description: Account created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AccountDto'
+ *       '400':
+ *         description: Invalid request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '409':
+ *         description: Account already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
     const { pubkey, email } = req.body;
@@ -96,7 +243,54 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
   }
 });
 
-
+/**
+ * @openapi
+ * /account/{pubkey}:
+ *   get:
+ *     operationId: "GetPublicAccount"
+ *     summary: Get public account information
+ *     description: Retrieve public information about a user account
+ *     tags:
+ *       - Account
+ *     parameters:
+ *       - name: pubkey
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User's public key
+ *     responses:
+ *       '200':
+ *         description: Public account information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PublicAccountDto'
+ *       '400':
+ *         description: Invalid request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '404':
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get('/:pubkey', queryAccountRateLimit, async (req: GetPublicAccountRequest, res: GetPublicAccountResponse) => {
   try {
     const targetPubkey = req.params.pubkey;
@@ -127,7 +321,49 @@ router.get('/:pubkey', queryAccountRateLimit, async (req: GetPublicAccountReques
   }
 });
 
-
+/**
+ * @openapi
+ * /account:
+ *   get:
+ *     operationId: "GetAccount"
+ *     summary: Get authenticated user's account
+ *     description: Retrieve the authenticated user's account information
+ *     tags:
+ *       - Account
+ *     security:
+ *       - NIP98Auth: []
+ *     responses:
+ *       '200':
+ *         description: Account information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AccountDto'
+ *       '401':
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '404':
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse) => {
   try {
     const pubkey = req.authenticatedPubkey;
@@ -146,7 +382,61 @@ router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse
   }
 });
 
-
+/**
+ * @openapi
+ * /account:
+ *   put:
+ *     operationId: "UpdateAccount"
+ *     summary: Update authenticated user's account
+ *     description: Update the authenticated user's account information
+ *     tags:
+ *       - Account
+ *     security:
+ *       - NIP98Auth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateAccountRequest'
+ *     responses:
+ *       '200':
+ *         description: Account updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AccountDto'
+ *       '401':
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '404':
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '409':
+ *         description: Username already taken
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountResponse) => {
   try {
     const pubkey = req.authenticatedPubkey;
