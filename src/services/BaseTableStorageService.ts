@@ -1,4 +1,4 @@
-import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult, TableEntity, odata } from "@azure/data-tables";
+import { TableClient, TableServiceClient, TableEntityQueryOptions, TableEntityResult, TableEntity } from "@azure/data-tables";
 import { DefaultAzureCredential } from "@azure/identity";
 import logger from "../utils/logger";
 
