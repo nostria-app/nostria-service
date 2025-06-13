@@ -43,7 +43,7 @@ describe("AccountService", () => {
       );
     });
 
-    it("should create a new account with pubkey and null email", async () => {
+    it("should create a new account with pubkey and undefined email", async () => {
       const pubkey = "test-pubkey";
 
 
@@ -52,7 +52,6 @@ describe("AccountService", () => {
       // Verify the result
       expect(result).toEqual({
         pubkey,
-        email: null,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
@@ -63,7 +62,6 @@ describe("AccountService", () => {
           partitionKey: "account",
           rowKey: pubkey,
           pubkey,
-          email: null,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
