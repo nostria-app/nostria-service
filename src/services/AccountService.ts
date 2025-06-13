@@ -78,6 +78,9 @@ class AccountService extends BaseTableStorageService<Account> {
 
   async getAccountByUsername(username: string): Promise<Account | null> {
     try {
+      // Ineffective query.
+      // TODO: either needs a second row `{ rowKey: username, pubkey }` and 
+      // then a second query or move to Cosmos DB with secondary index on `username`
       const entities = await this.queryEntities(`username eq '${username}'`);      
       return entities.length > 0 ? entities[0] : null;
     } catch (error) {
