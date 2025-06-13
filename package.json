@@ -22,12 +22,16 @@
   "dependencies": {
     "@azure/data-tables": "^13.3.0",
     "@azure/identity": "^4.10.0",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "nostr-tools": "^2.13.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
     "web-push": "^3.6.7",
     "winston": "^3.17.0"

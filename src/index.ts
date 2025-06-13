@@ -6,6 +6,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger';
 
 // Import routes
 import account from './routes/account';
@@ -38,6 +40,14 @@ app.use(helmet({ contentSecurityPolicy: false })); // Secure HTTP headers
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Serve raw Swagger JSON
+app.get('/openapi.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
