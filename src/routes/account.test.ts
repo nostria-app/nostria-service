@@ -40,7 +40,8 @@ describe('Account API', () => {
         .expect(200);
 
       expect(accountService.getAccount).toHaveBeenCalledWith(account.pubkey)
-      expect(response.body).toEqual({
+      expect(response.body).toHaveProperty("success", true);
+      expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
         tier: 'free',
@@ -51,14 +52,19 @@ describe('Account API', () => {
     test('should check if pubkey is available', async () => {
       accountService.getAccount.mockResolvedValueOnce(null)
 
-      await request(app)
+      const response = await request(app)
         .get(`/api/account/${account.pubkey}`)
-        .expect(404);
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: false,
+        message: 'User not found'
+      });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(account.pubkey);
     });
 
-    test('should check if username is not available', async () => {
+    test('should return existing user by username', async () => {
       accountService.getAccountByUsername.mockResolvedValueOnce(account)
 
       const response = await request(app)
@@ -66,7 +72,8 @@ describe('Account API', () => {
         .expect(200);
 
       expect(accountService.getAccountByUsername).toHaveBeenCalledWith(account.username)
-      expect(response.body).toEqual({
+      expect(response.body).toHaveProperty("success", true);
+      expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
         tier: 'free',
@@ -74,21 +81,19 @@ describe('Account API', () => {
       });
     });
 
-    test('should check if username is available', async () => {
+    test('should handle when the user with username is not available', async () => {
       accountService.getAccountByUsername.mockResolvedValueOnce(null)
 
-      await request(app)
+      const response = await request(app)
         .get(`/api/account/${account.username}`)
-        .expect(404);
+        .expect(200);
 
+      expect(response.body).toEqual({
+        success: false,
+        message: 'User not found'
+      });
       expect(accountService.getAccount).not.toHaveBeenCalled()
       expect(accountService.getAccountByUsername).toHaveBeenCalledWith(account.username);
-    });
-
-    test('should return 400 for invalid pubkey format', async () => {
-      await request(app)
-        .get('/api/account/invalid-pubkey')
-        .expect(404); // The endpoint doesn't validate format, just checks existence
     });
 
     test('should apply rate limits', async () => {

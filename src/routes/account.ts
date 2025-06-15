@@ -130,8 +130,10 @@ type AddAccountResponse = Response<AccountDto | ErrorBody>
 type GetAccountRequest = NIP98AuthenticatedRequest;
 type GetAccountResponse = Response<AccountDto | ErrorBody>
 
+type ApiResponse<T> = { success: boolean, message?: string, result?: T }
+
 type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string}, any, any, any>
-type GetPublicAccountResponse = Response<PublicAccountDto | ErrorBody>
+type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBody>
 
 /**
  * @openapi
@@ -308,7 +310,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
     }
 
     if (!account) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(200).json({ success: false, message: 'User not found' });
     }
 
     // Public profile information
@@ -319,7 +321,10 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
       isActive: true,
     };
 
-    return res.status(200).json(publicProfile);
+    return res.status(200).json({
+      success: true,
+      result: publicProfile,
+    });
   } catch (error: any) {
     logger.error(`Error getting user profile: ${error.message}`);
     return res.status(500).json({ error: 'Failed to get user profile' });
