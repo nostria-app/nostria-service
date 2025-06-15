@@ -133,6 +133,23 @@ type GetAccountResponse = Response<AccountDto | ErrorBody>
 type ApiResponse<T> = { success: boolean, message?: string, result?: T }
 
 type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string}, any, any, any>
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     ApiResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           description: Whether the request was successful
+ *         message:
+ *           type: string
+ *           description: Optional message about the response
+ *         result:
+ *           $ref: '#/components/schemas/PublicAccountDto'
+ */
 type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBody>
 
 /**
@@ -268,15 +285,9 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/PublicAccountDto'
+ *               $ref: '#/components/schemas/ApiResponse'
  *       '400':
  *         description: Invalid request
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       '404':
- *         description: Account not found
  *         content:
  *           application/json:
  *             schema:
