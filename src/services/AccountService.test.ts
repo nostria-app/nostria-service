@@ -1,7 +1,8 @@
 process.env.AZURE_STORAGE_ACCOUNT = "test"
 jest.mock('@azure/data-tables')
 import { createMockIterator } from "../helpers/testHelper";
-import accountService, { Account } from "./AccountService";
+import { tiers } from "./account/tiers";
+import accountService, { Account, DEFAULT_SUBSCRIPTION, Subscription } from "./AccountService";
 
 describe("AccountService", () => {
   let mockTableClient: { upsertEntity: jest.Mock; getEntity: jest.Mock; listEntities: jest.Mock };
@@ -15,7 +16,7 @@ describe("AccountService", () => {
   });
 
   describe("addAccount", () => {
-    it("should create a new account with pubkey and email", async () => {
+    it("should create a new account with pubkey and email with default free tier", async () => {
       const pubkey = "test-pubkey";
       const email = "test@example.com";
 
@@ -25,6 +26,7 @@ describe("AccountService", () => {
       expect(result).toEqual({
         pubkey,
         email,
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
@@ -36,6 +38,7 @@ describe("AccountService", () => {
           rowKey: pubkey,
           pubkey,
           email,
+          subscription: DEFAULT_SUBSCRIPTION,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -43,15 +46,30 @@ describe("AccountService", () => {
       );
     });
 
-    it("should create a new account with pubkey and undefined email", async () => {
+    it("should create a new account with pubkey, username and tier", async () => {
       const pubkey = "test-pubkey";
+      const username = "bob";
+      const subscription: Subscription = {
+        tier: 'premium',
+        expiryDate: new Date(Date.now() + 60 * 60 * 1000),
+        billingCycle: 'monthly',
+        price: {
+          priceCents: 100,
+          currency: 'USD',
+        },
+        entitlements: {
+          notificationsPerDay: 10,
+          features: ['BASIC_WEBPUSH']
+        }
+      }
 
-
-      const result = await accountService.addAccount({ pubkey });
+      const result = await accountService.addAccount({ pubkey, username, subscription });
 
       // Verify the result
       expect(result).toEqual({
         pubkey,
+        username,
+        subscription,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
@@ -62,6 +80,35 @@ describe("AccountService", () => {
           partitionKey: "account",
           rowKey: pubkey,
           pubkey,
+          username,
+          subscription,
+          createdAt: expect.any(Date),
+          updatedAt: expect.any(Date),
+        },
+        "Replace"
+      );
+    });
+
+    it("should create a new account with only pubkey", async () => {
+      const pubkey = "test-pubkey";
+
+      const result = await accountService.addAccount({ pubkey });
+
+      // Verify the result
+      expect(result).toEqual({
+        pubkey,
+        subscription: DEFAULT_SUBSCRIPTION,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      });
+
+      // Verify the upsertEntity was called with correct parameters
+      expect(mockTableClient.upsertEntity).toHaveBeenCalledWith(
+        {
+          partitionKey: "account",
+          rowKey: pubkey,
+          pubkey,
+          subscription: DEFAULT_SUBSCRIPTION,
           createdAt: expect.any(Date),
           updatedAt: expect.any(Date),
         },
@@ -76,6 +123,7 @@ describe("AccountService", () => {
       const mockAccount: Account = {
         pubkey,
         email: "test@example.com",
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -120,6 +168,7 @@ describe("AccountService", () => {
       const existingAccount: Account = {
         pubkey: "test-pubkey",
         email: "old@example.com",
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: originalDate,
         updatedAt: originalDate,
       };
@@ -156,6 +205,7 @@ describe("AccountService", () => {
       const existingAccount: Account = {
         pubkey: "test-pubkey",
         email: "test@example.com",
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: originalDate,
         updatedAt: originalDate,
       };
@@ -192,6 +242,7 @@ describe("AccountService", () => {
         pubkey: "test-pubkey",
         email: "test@example.com",
         username: "existinguser",
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: originalDate,
         updatedAt: originalDate,
       };
@@ -217,6 +268,7 @@ describe("AccountService", () => {
       const existingAccount: Account = {
         pubkey: "test-pubkey",
         email: "test@example.com",
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: originalDate,
         updatedAt: originalDate,
       };
@@ -297,6 +349,7 @@ describe("AccountService", () => {
         pubkey: "test-pubkey",
         email: "test@example.com",
         username,
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
