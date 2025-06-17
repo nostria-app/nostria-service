@@ -1,7 +1,6 @@
 process.env.AZURE_STORAGE_ACCOUNT = "test"
 jest.mock('@azure/data-tables')
 import { createMockIterator } from "../helpers/testHelper";
-import { tiers } from "./account/tiers";
 import accountService, { Account, DEFAULT_SUBSCRIPTION, Subscription } from "./AccountService";
 
 describe("AccountService", () => {
