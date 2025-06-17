@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
-import accountService, { Account } from '../services/AccountService';
+import accountService, { Account, Subscription } from '../services/AccountService';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
 
@@ -105,6 +105,7 @@ interface AccountDto {
   username?: string;
   signupDate: Date;
   lastLoginDate?: Date;
+  subscription?: Subscription;
 }
 
 /**
@@ -183,11 +184,12 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, email, username, createdAt, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, email, username, createdAt, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   email,
   username,
   signupDate: createdAt,
+  subscription,
   lastLoginDate,
 });
 

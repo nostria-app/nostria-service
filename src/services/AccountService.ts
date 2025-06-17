@@ -1,4 +1,13 @@
+import { BillingCycle, Price, Tier, Entitlements, tiers } from "./account/tiers";
 import BaseTableStorageService, { escapeODataValue } from "./BaseTableStorageService";
+
+export interface Subscription {
+  tier: Tier;
+  expiryDate?: Date;
+  billingCycle?: BillingCycle;
+  price?: Price;
+  entitlements: Entitlements;
+};
 
 export interface Account {
   pubkey: string;
@@ -7,21 +16,34 @@ export interface Account {
   createdAt: Date;
   updatedAt: Date;
   lastLoginDate?: Date;
+  subscription: Subscription;
 }
 
-type CreateAccountDto = Pick<Account, 'pubkey' | 'email'>
+type CreateAccountDto = {
+  pubkey: string;
+  email?: string;
+  username?: string;
+  subscription?: Subscription;
+}
+
+export const DEFAULT_SUBSCRIPTION: Subscription = {
+  tier: 'free',
+  entitlements: tiers['free'].entitlements,
+};
 
 class AccountService extends BaseTableStorageService<Account> {
   constructor() {
     super("accounts");
   }
 
-  async addAccount({ pubkey, email }: CreateAccountDto): Promise<Account> {
+  async addAccount({ pubkey, username, email, subscription }: CreateAccountDto): Promise<Account> {
     const now = new Date();
 
     const account: Account = {
       pubkey,
       email,
+      username,
+      subscription: subscription || DEFAULT_SUBSCRIPTION,
       createdAt: now,
       updatedAt: now,
     };

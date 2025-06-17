@@ -16,7 +16,7 @@ jest.mock('../routes/notification', () => {
 
 // Now import the app after mocks are set up
 jest.mock('../services/AccountService');
-import AccountService from '../services/AccountService';
+import AccountService, { DEFAULT_SUBSCRIPTION } from '../services/AccountService';
 
 import app from '../index';
 import { generateNIP98, testAccount } from '../helpers/testHelper';
@@ -119,6 +119,7 @@ describe('Account API', () => {
       accountService.addAccount.mockResolvedValueOnce({
         pubkey: account.pubkey,
         email: account.email,
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -139,6 +140,7 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         email: account.email,
         pubkey: account.pubkey,
+        subscription: DEFAULT_SUBSCRIPTION,
         signupDate: account.createdAt.toISOString(),
       });
     });
@@ -170,6 +172,7 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         email: account.email,
         pubkey: account.pubkey,
+        subscription: DEFAULT_SUBSCRIPTION,
         signupDate: account.createdAt.toISOString(),
       });
     });
@@ -245,6 +248,7 @@ describe('Account API', () => {
         username: account.username,
         email: account.email,
         signupDate: account.createdAt.toISOString(),
+        subscription: DEFAULT_SUBSCRIPTION,
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
@@ -314,6 +318,7 @@ describe('Account API', () => {
         username: updatedAccount.username,
         email: updatedAccount.email,
         signupDate: updatedAccount.createdAt.toISOString(),
+        subscription: updatedAccount.subscription,
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
@@ -358,6 +363,7 @@ describe('Account API', () => {
         username: updatedAccount.username,
         email: updatedAccount.email,
         signupDate: updatedAccount.createdAt.toISOString(),
+        subscription: updatedAccount.subscription,
       });
 
       expect(accountService.getAccount).toHaveBeenCalledWith(testAuth.npub);
