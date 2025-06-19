@@ -13,7 +13,6 @@ jest.mock('../routes/notification', () => {
   return router;
 });
 
-
 // Now import the app after mocks are set up
 jest.mock('../services/AccountService');
 import AccountService, { DEFAULT_SUBSCRIPTION } from '../services/AccountService';

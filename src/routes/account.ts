@@ -6,6 +6,7 @@ import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import accountService, { Account, Subscription } from '../services/AccountService';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
+import { tiers, features as featureLabels } from '../services/account/tiers';
 
 /**
  * @openapi
@@ -191,6 +192,132 @@ const toAccountDto = ({ pubkey, email, username, createdAt, subscription, lastLo
   signupDate: createdAt,
   subscription,
   lastLoginDate,
+});
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     Feature:
+ *       type: string
+ *       description: Subscription feature
+ *       enum:
+ *         - BASIC_WEBPUSH
+ *         - COMMUNITY_SUPPORT
+ *         - ADVANCED_FILTERING
+ *         - PRIORITY_SUPPORT
+ *         - CUSTOM_TEMPLATES
+ *         - API_ACCESS
+ *         - WEBHOOK
+ *         - ANALYTICS
+ *     FeatureWithLabel:
+ *       type: object
+ *       required:  # List the required properties here
+ *         - key
+ *       properties:
+ *         key:
+ *           $ref: '#/components/schemas/Feature'
+ *         label:
+ *           type: string
+ *           description: Human-readable description of the feature
+ *     Price:
+ *       type: object
+ *       properties:
+ *         priceCents:
+ *           type: integer
+ *           description: Price in cents
+ *         currency:
+ *           type: string
+ *           description: Currency code (e.g., USD)
+ *     BillingCycle:
+ *       type: string
+ *       enum: [monthly, quarterly, yearly]
+ *     Pricing:
+ *       type: object
+ *       properties:
+ *         monthly:
+ *           $ref: '#/components/schemas/Price'
+ *         quarterly:
+ *           $ref: '#/components/schemas/Price'
+ *         yearly:
+ *           $ref: '#/components/schemas/Price'
+ *     Entitlements:
+ *       type: object
+ *       properties:
+ *         notificationsPerDay:
+ *           type: integer
+ *         features:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/FeatureWithLabel'
+ *     Tier:
+ *       type: string
+ *       enum: [free, premium, premium_plus]
+ *     TierDetails:
+ *       type: object
+ *       required:
+ *         - tier
+ *         - name
+ *         - pricing
+ *         - entitlements
+ *       properties:
+ *         tier:
+ *           $ref: '#/components/schemas/Tier'
+ *         name:
+ *           type: string
+ *         pricing:
+ *           $ref: '#/components/schemas/Pricing'
+ *         entitlements:
+ *           $ref: '#/components/schemas/Entitlements'
+ *
+ * /account/tiers:
+ *   get:
+ *     operationId: "GetTiers"
+ *     summary: Get available subscription tiers
+ *     description: Retrieve all available subscription tiers and their details
+ *     tags:
+ *       - Account
+ *     responses:
+ *       '200':
+ *         description: List of subscription tiers
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties:
+ *                 $ref: '#/components/schemas/TierDetails'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/tiers', (req: Request, res: Response) => {
+  try {
+    // Map features to include human-readable labels
+    const tiersWithLabels = Object.fromEntries(
+      Object.entries(tiers)
+        .filter(([tierKey]) => tierKey !== 'free')
+        .map(([tierKey, tierValue]) => [
+          tierKey,
+          {
+            ...tierValue,
+            entitlements: {
+              ...tierValue.entitlements,
+              features: tierValue.entitlements.features.map((feature) => ({
+                key: feature,
+                label: featureLabels[feature].label,
+              })),
+            },
+          },
+        ])
+    );
+    return res.status(200).json(tiersWithLabels);
+  } catch (error: any) {
+    logger.error(`Error getting tiers: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to get tiers' });
+  }
 });
 
 /**

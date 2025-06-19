@@ -35,7 +35,8 @@ export interface Entitlements {
 
 interface TierDetails {
   tier: Tier;
-  pricing?: Pricing,
+  name: string;
+  pricing?: Pricing;
   entitlements: Entitlements;
 };
 
@@ -61,6 +62,7 @@ const PremiumPlusFeatures: Feature[] = [
 export const tiers: Record<Tier, TierDetails> = {
   free: {
     tier: 'free',
+    name: 'Free',
     entitlements: {
       notificationsPerDay: 5,
       features: BasicFeatures,
@@ -68,17 +70,18 @@ export const tiers: Record<Tier, TierDetails> = {
   },
   premium: {
     tier: 'premium',
+    name: 'Premium',
     pricing: {
       monthly: {
-        priceCents: 999,
+        priceCents: 1000,
         currency: 'USD',
       },
       quarterly: {
-        priceCents: 2497,
+        priceCents: 2500,
         currency: 'USD',
       },
       yearly: {
-        priceCents: 9999,
+        priceCents: 9000,
         currency: 'USD',
       },
     },
@@ -89,17 +92,18 @@ export const tiers: Record<Tier, TierDetails> = {
   },
   premium_plus: {
     tier: 'premium_plus',
+    name: 'Premium+',
     pricing: {
       monthly: {
-        priceCents: 1999,
+        priceCents: 2000,
         currency: 'USD',
       },
       quarterly: {
-        priceCents: 4997,
+        priceCents: 5000,
         currency: 'USD',
       },
       yearly: {
-        priceCents: 19999,
+        priceCents: 18000,
         currency: 'USD',
       },
     },
