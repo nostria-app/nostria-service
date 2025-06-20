@@ -5,9 +5,11 @@ import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
-import { tiers, features as featureLabels } from '../services/account/tiers';
+import config from '../config';
+import { features } from '../config/features';
 import accountRepository from '../database/accountRepository';
 import { Account } from '../models/account';
+
 
 /**
  * @openapi
@@ -289,9 +291,10 @@ const toAccountDto = ({ pubkey, username, createdAt, lastLoginDate }: Account): 
  */
 router.get('/tiers', (req: Request, res: Response) => {
   try {
+    
     // Map features to include human-readable labels
     const tiersWithLabels = Object.fromEntries(
-      Object.entries(tiers)
+      Object.entries(config.tiers)
         .filter(([tierKey]) => tierKey !== 'free')
         .map(([tierKey, tierValue]) => [
           tierKey,
@@ -301,7 +304,7 @@ router.get('/tiers', (req: Request, res: Response) => {
               ...tierValue.entitlements,
               features: tierValue.entitlements.features.map((feature) => ({
                 key: feature,
-                label: featureLabels[feature].label,
+                label: features[feature].label,
               })),
             },
           },

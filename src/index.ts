@@ -15,6 +15,7 @@ import subscriptionRoutes from './routes/subscription';
 import notificationRoutes from './routes/notification';
 import statusRoutes from './routes/status';
 import keyRoutes from './routes/key';
+import paymentRoutes from './routes/payment';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -58,6 +59,7 @@ app.use('/api/notification', apiKeyAuth, notificationRoutes); // Protected route
 app.use('/api/status', statusRoutes);
 app.use('/api/key', keyRoutes);
 app.use('/api/account', account);
+app.use('/api/payment', paymentRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);

@@ -23,6 +23,8 @@ class AccountRepository extends BaseRepository<Account> {
         ? `username eq ${escapeODataValue(username)} and rowKey ne ${escapeODataValue(excludePubkey)}`
         : `username eq ${escapeODataValue(username)}`;
 
+      console.log(filter);
+
       const entities = await this.queryEntities(filter);
       return entities.length > 0;
     } catch (error) {
