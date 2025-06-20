@@ -40,7 +40,7 @@ class TableStorageService {
   public tableClient!: TableClient; // For backward compatibility
 
   constructor() {
-    this.notificationsTableName = process.env.TABLE_NAME || "notifications";
+    this.notificationsTableName = "notifications";
     this.settingsTableName = "settings";
     this.initializeClient();
   }
