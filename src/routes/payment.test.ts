@@ -3,7 +3,7 @@ import request from 'supertest';
 import { Tier, BillingCycle } from '../config/types';
 
 // Mock the services
-jest.mock('../services/BaseTableStorageService')
+jest.mock('../database/BaseRepository')
 jest.mock('../routes/subscription', () => {
   const router = require('express').Router();
   return router;
@@ -14,13 +14,13 @@ jest.mock('../routes/notification', () => {
   return router;
 });
 
-jest.mock('../services/PaymentService');
-jest.mock('../services/AccountService');
+jest.mock('../database/paymentRepository');
+jest.mock('../database/accountRepository');
 jest.mock('../services/LightningService');
 
 import app from '../index';
-import paymentService from '../services/PaymentService';
-import accountService from '../services/AccountService';
+import paymentRepository from '../database/paymentRepository';
+import accountRepository from '../database/accountRepository';
 import lightningService from '../services/LightningService';
 
 // Mock uuid
@@ -28,12 +28,14 @@ jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-id'),
 }));
 
-const mockPaymentService = paymentService as jest.Mocked<typeof paymentService>;
-const mockAccountService = accountService as jest.Mocked<typeof accountService>;
+const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
+const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
 const mockLightningService = lightningService as jest.Mocked<typeof lightningService>;
 
 import { v4 } from 'uuid';
 import config from '../config';
+import { Payment } from '../models/payment';
+import { generateKeyPair, testPayment } from '../helpers/testHelper';
 
 
 describe('Payment Routes', () => {
@@ -48,7 +50,7 @@ describe('Payment Routes', () => {
       tierName: 'premium' as Tier,
       price: 999,
       billingCycle: 'monthly' as BillingCycle,
-      pubkey: 'npub1234567890',
+      pubkey: generateKeyPair().npub,
       username: 'testuser',
     };
 
@@ -61,23 +63,16 @@ describe('Payment Routes', () => {
         amountSat: 22200,
       });
 
-      const mockInvoice = {
-        id: 'test-uuid-id',
-        hash: 'test-hash',
-        invoice: 'lnbc1234567890',
-        amountSat: 22200,
-        tier: 'premium' as Tier,
-        billingCycle: 'monthly' as BillingCycle,
-        priceCents: 999,
-        pubkey: 'npub1234567890',
-        username: 'testuser',
-        isPaid: false,
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 5000),
-      }
+      const mockInvoice = testPayment({
+        pubkey: validPaymentRequest.pubkey,
+        billingCycle: validPaymentRequest.billingCycle,
+        priceCents: validPaymentRequest.price,
+        tier: validPaymentRequest.tierName,
+        username: validPaymentRequest.username,
+      });
 
       // Mock payment service
-      mockPaymentService.createInvoice.mockResolvedValue(mockInvoice);
+      mockPaymentRepository.create.mockResolvedValue(mockInvoice);
 
       const response = await request(app)
         .post('/api/payment')
@@ -86,25 +81,28 @@ describe('Payment Routes', () => {
 
       expect(response.body).toEqual({
         id: 'test-uuid-id',
-        hash: 'test-hash',
-        amountSat: 22200,
         status: 'pending',
-        invoice: 'lnbc1234567890',
+        lnInvoice: 'lnbc1234567890',
         expiresAt: mockInvoice.expiresAt.toISOString()
       });
 
       expect(mockLightningService.getUsdBtcRate).toHaveBeenCalled();
       expect(mockLightningService.createInvoice).toHaveBeenCalledWith(22200, 'test-uuid-id', 'NostriaPremium');
-      expect(mockPaymentService.createInvoice).toHaveBeenCalledWith({
+      expect(mockPaymentRepository.create).toHaveBeenCalledWith({
         id: 'test-uuid-id',
-        hash: 'test-hash',
-        invoice: 'lnbc1234567890',
-        amountSat: 22200,
+        type: 'ln',
+        lnHash: 'test-hash',
+        lnInvoice: 'lnbc1234567890',
+        lnAmountSat: 22200,
         tier: 'premium',
         billingCycle: 'monthly',
         priceCents: 999,
-        pubkey: 'npub1234567890',
+        pubkey: mockInvoice.pubkey,
         username: 'testuser',
+        isPaid: false,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+        expiresAt: expect.any(Date),
       });
     });
 
@@ -165,89 +163,68 @@ describe('Payment Routes', () => {
     });
   });
 
-  describe('GET /api/payment/:hash', () => {
-    const mockInvoice = {
-      id: 'test-id',
-      hash: 'test-hash',
-      invoice: 'lnbc1234567890',
-      amountSat: 22200,
-      tier: 'premium' as Tier,
-      billingCycle: 'monthly' as BillingCycle,
-      priceCents: 999,
-      pubkey: 'npub1234567890',
-      username: 'testuser',
-      isPaid: false,
-      createdAt: new Date(),
-      expiresAt: new Date(Date.now() + 5000)
-    };
+  describe('GET /api/payment/:paymentId', () => {
+    const mockInvoice = testPayment();
 
     it('should return 400 when invoice not found', async () => {
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(null);
+      mockPaymentRepository.get.mockResolvedValue(null);
 
       const response = await request(app)
-        .get('/api/payment/non-existent-hash')
+        .get('/api/payment/non-existing-id')
         .expect(400);
 
-      expect(response.body.error).toBe('Invoice not found');
+      expect(response.body.error).toBe('Payment Record not found');
     });
 
     it('should return paid status when invoice is already marked as paid', async () => {
-      const paidInvoice = { 
-        ...mockInvoice, 
-        isPaid: true, 
-        paidAt: new Date('2025-06-18T15:16:45.325Z') 
+      const paidInvoice = {
+        ...mockInvoice,
+        isPaid: true,
+        paidAt: new Date('2025-06-18T15:16:45.325Z')
       };
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(paidInvoice);
+      mockPaymentRepository.get.mockResolvedValue(paidInvoice);
 
       const response = await request(app)
-        .get('/api/payment/test-hash')
+        .get('/api/payment/test-id')
         .expect(200);
 
       expect(mockLightningService.checkPaymentStatus).not.toHaveBeenCalled();
       expect(response.body).toEqual({
-        id: 'test-id',
-        hash: 'test-hash',
-        amountSat: 22200,
+        id: mockInvoice.id,
         status: 'paid',
-        invoice: 'lnbc1234567890',
+        lnInvoice: 'lnbc1234567890',
         expiresAt: mockInvoice.expiresAt.toISOString()
       });
     });
 
     it('should mark invoice as paid and create account when payment is confirmed', async () => {
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(mockInvoice);
-      mockPaymentService.markInvoiceAsPaid.mockResolvedValue({
-        ...mockInvoice,
-        isPaid: true,
-        paidAt: new Date(),
-      });
+      mockPaymentRepository.get.mockResolvedValue(mockInvoice);
 
       // Mock LightningService payment status check
       mockLightningService.checkPaymentStatus.mockResolvedValue(true);
 
       // Mock account service
-      mockAccountService.getAccount.mockResolvedValue(null);
-      mockAccountService.addAccount.mockResolvedValue({
+      mockAccountRepository.getByPubKey.mockResolvedValue(null);
+      mockAccountRepository.create.mockResolvedValue({
         pubkey: 'npub1234567890',
         username: 'testuser',
-        subscription: {
-          tier: 'premium',
-          billingCycle: 'monthly',
-          price: { priceCents: 999, currency: 'USD' },
-          entitlements: expect.any(Object),
-        },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
       const response = await request(app)
-        .get('/api/payment/test-hash')
+        .get('/api/payment/test-id')
         .expect(200);
 
       expect(response.body).toHaveProperty('status', 'paid');
-      expect(mockPaymentService.markInvoiceAsPaid).toHaveBeenCalledWith('test-id');
-      expect(mockAccountService.addAccount).toHaveBeenCalledTimes(1);
-      expect(mockAccountService.updateAccount).not.toHaveBeenCalled();
+      expect(mockPaymentRepository.update).toHaveBeenCalledWith({
+        ...mockInvoice,
+        isPaid: true,
+        paidAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      });
+      expect(mockAccountRepository.create).toHaveBeenCalledTimes(1);
+      expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
 
     it('should update existing account when payment is confirmed', async () => {
@@ -259,53 +236,40 @@ describe('Payment Routes', () => {
         updatedAt: new Date(),
       };
 
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(mockInvoice);
-      mockPaymentService.markInvoiceAsPaid.mockResolvedValue({
-        ...mockInvoice,
-        isPaid: true,
-        paidAt: new Date(),
-      });
+      mockPaymentRepository.get.mockResolvedValue(mockInvoice);
 
       // Mock LightningService payment status check
       mockLightningService.checkPaymentStatus.mockResolvedValue(true);
 
       // Mock account service
-      mockAccountService.getAccount.mockResolvedValue(existingAccount);
-      mockAccountService.updateAccount.mockResolvedValue({
+      mockAccountRepository.getByPubKey.mockResolvedValue(existingAccount);
+      mockAccountRepository.update.mockResolvedValue({
         ...existingAccount,
         username: 'testuser',
-        subscription: {
-          tier: 'premium' as Tier,
-          billingCycle: 'monthly' as BillingCycle,
-          price: { priceCents: 999, currency: 'USD' },
-          entitlements: config.tiers.premium.entitlements,
-        },
         updatedAt: new Date(),
       });
 
       const response = await request(app)
-        .get('/api/payment/test-hash')
+        .get('/api/payment/test-id')
         .expect(200);
 
       expect(response.body).toHaveProperty('status', 'paid');
-      expect(mockAccountService.addAccount).not.toHaveBeenCalled();
-      expect(mockAccountService.updateAccount).toHaveBeenCalledTimes(1);
+      expect(mockAccountRepository.create).not.toHaveBeenCalled();
+      expect(mockAccountRepository.update).toHaveBeenCalledTimes(1);
     });
 
     it('should return unpaid status when payment is not confirmed', async () => {
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(mockInvoice);
+      mockPaymentRepository.get.mockResolvedValue(mockInvoice);
       mockLightningService.checkPaymentStatus.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/payment/test-hash')
-        
+      const response = await request(app).get('/api/payment/test-id')
+
       expect(response.status).toEqual(200);
       expect(mockLightningService.checkPaymentStatus).toHaveBeenCalledTimes(1);
       expect(response.body).toEqual({
-        id: 'test-id',
-        hash: 'test-hash',
-        amountSat: 22200,
+        id: mockInvoice.id,
         status: 'pending',
-        invoice: 'lnbc1234567890',
+        lnInvoice: 'lnbc1234567890',
         expiresAt: mockInvoice.expiresAt.toISOString()
       });
     });
@@ -315,29 +279,26 @@ describe('Payment Routes', () => {
         ...mockInvoice,
         expiresAt: new Date(Date.now() - 15 * 60 * 1000) // 15 minutes ago
       }
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(expiredInvoice);
+      mockPaymentRepository.get.mockResolvedValue(expiredInvoice);
       mockLightningService.checkPaymentStatus.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/payment/test-hash');
-      
+      const response = await request(app).get('/api/payment/test-id');
+
       expect(response.status).toEqual(200);
       expect(mockLightningService.checkPaymentStatus).not.toHaveBeenCalled();
       expect(response.body).toEqual({
-        id: 'test-id',
-        hash: 'test-hash',
-        amountSat: 22200,
+        id: expiredInvoice.id,
         status: 'expired',
-        invoice: 'lnbc1234567890',
+        lnInvoice: 'lnbc1234567890',
         expiresAt: expiredInvoice.expiresAt.toISOString()
       });
     });
 
     it('should return 500 when external payment status API fails', async () => {
-      const errorInvoice = { ...mockInvoice, hash: 'error-hash-456' };
-      mockPaymentService.getInvoiceByHash.mockResolvedValue(errorInvoice);
+      mockPaymentRepository.get.mockResolvedValue(mockInvoice);
       mockLightningService.checkPaymentStatus.mockRejectedValue(new Error('Internal Server Error'));
 
-      const response = await request(app).get('/api/payment/test-hash')
+      const response = await request(app).get('/api/payment/test-id')
 
       expect(response.status).toEqual(500);
       expect(response.body.error).toBe('Internal server error');

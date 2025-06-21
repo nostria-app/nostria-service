@@ -2,12 +2,13 @@ import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
-import accountService from '../services/AccountService';
+import accountRepository from '../database/accountRepository';
 import { ErrorBody } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
-import paymentService, { PaymentInvoice } from '../services/PaymentService';
+import paymentRepository from '../database/paymentRepository';
 import config from '../config';
+import { INVOICE_TTL, Payment } from '../models/payment';
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
@@ -65,22 +66,14 @@ interface CreatePaymentRequest {
  *       type: object
  *       required:
  *         - id
- *         - hash
- *         - amountSat
- *         - invoice
+ *         - lnInvoice
  *         - status
  *         - expiresAt
  *       properties:
  *         id:
  *           type: string
  *           description: Invoice ID
- *         hash:
- *           type: string
- *           description: Payment hash
- *         amountSat:
- *           type: number
- *           description: Amount in satoshis
- *         invoice:
+ *         lnInvoice:
  *           type: string
  *           description: LN invoice
  *         status:
@@ -94,9 +87,7 @@ interface CreatePaymentRequest {
  */
 interface PaymentDto {
   id: string;
-  hash: string;
-  amountSat: number;
-  invoice: string;
+  lnInvoice: string;
   status: PaymentStatus;
   expiresAt: Date;
 }
@@ -104,14 +95,12 @@ interface PaymentDto {
 type CreatePaymentRequestType = Request<{}, any, CreatePaymentRequest, any>;
 type CreatePaymentResponseType = Response<PaymentDto | ErrorBody>;
 
-type GetPaymentRequest = Request<{ hash: string }, any, any, any>;
+type GetPaymentRequest = Request<{ paymentId: string }, any, any, any>;
 type GetPaymentResponse = Response<PaymentDto | ErrorBody>;
 
-const toPaymentDto = ({ id, hash, invoice, amountSat, expiresAt }: PaymentInvoice, status: PaymentStatus): PaymentDto => ({
+const toPaymentDto = ({ id, lnInvoice, expiresAt }: Payment, status: PaymentStatus): PaymentDto => ({
   id,
-  hash,
-  invoice,
-  amountSat,
+  lnInvoice,
   status,
   expiresAt,
 });
@@ -201,22 +190,28 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       return res.status(500).json({ error: 'Invalid invoice data received' });
     }
 
+    const now = new Date()
     // Store invoice in database
-    const paymentInvoice = await paymentService.createInvoice({
+    const payment = await paymentRepository.create({
       id: invoiceId,
-      hash,
-      invoice,
-      amountSat,
+      type: 'ln',
+      lnHash: hash,
+      lnInvoice: invoice,
+      lnAmountSat: amountSat,
       tier: tierName,
       billingCycle,
       priceCents: price,
       pubkey,
       username,
+      isPaid: false,
+      expiresAt: new Date(now.getTime() + INVOICE_TTL),
+      createdAt: now,
+      updatedAt: now,
     });
 
     logger.info(`Payment invoice created for ${pubkey}, tier: ${tierName}, amount: ${amountSat} sats`);
 
-    return res.json(toPaymentDto(paymentInvoice, 'pending'));
+    return res.json(toPaymentDto(payment, 'pending'));
   } catch (error) {
     logger.error('Error creating payment invoice:', error);
     return res.status(500).json({ error: 'Internal server error' });
@@ -225,19 +220,19 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
 
 /**
  * @openapi
- * /payment/{hash}:
+ * /payment/{paymentId}:
  *   get:
  *     operationId: "GetPayment" 
  *     summary: Get payment
- *     description: Get payment by hash
+ *     description: Get payment by id
  *     tags: [Payment]
  *     parameters:
  *       - in: path
- *         name: hash
+ *         name: paymentId
  *         required: true
  *         schema:
  *           type: string
- *         description: Payment hash returned by invoice creation
+ *         description: Payment id
  *     responses:
  *       200:
  *         description: Payment status retrieved successfully
@@ -258,76 +253,77 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:hash', paymentRateLimit, async (req: GetPaymentRequest, res: GetPaymentResponse) => {
+router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: GetPaymentResponse) => {
   try {
-    const { hash } = req.params;
+    const { paymentId } = req.params;
 
     // Find invoice by hash
-    const invoice = await paymentService.getInvoiceByHash(hash);
-    if (!invoice) {
-      return res.status(400).json({ error: 'Invoice not found' });
+    const payment = await paymentRepository.get(paymentId);
+    if (!payment) {
+      return res.status(400).json({ error: 'Payment Record not found' });
     }
 
     // Check if already marked as paid
-    if (invoice.isPaid) {
-      return res.json(toPaymentDto(invoice, 'paid'));
+    if (payment.isPaid) {
+      return res.json(toPaymentDto(payment, 'paid'));
     }
 
-    if (invoice.expiresAt < new Date()) {
-      return res.json(toPaymentDto(invoice, 'expired'));
+    if (payment.expiresAt < new Date()) {
+      return res.json(toPaymentDto(payment, 'expired'));
     }
 
     // Check payment status with LightningService
-    const paid = await lightningService.checkPaymentStatus(hash);
+    const paid = await lightningService.checkPaymentStatus(payment.lnHash);
 
     if (paid) {
-      
-      
-
       // Create or update user account with subscription
-      const tierDetails = config.tiers[invoice.tier];
+      const tierDetails = config.tiers[payment.tier];
       const subscription = {
-        tier: invoice.tier,
-        billingCycle: invoice.billingCycle,
+        tier: payment.tier,
+        billingCycle: payment.billingCycle,
         price: {
-          priceCents: invoice.priceCents,
+          priceCents: payment.priceCents,
           currency: 'USD',
         },
         entitlements: tierDetails.entitlements,
       };
 
       // Check if account exists
-      console.log(invoice);
-      let account = await accountService.getAccount(invoice.pubkey);
+      let account = await accountRepository.getByPubKey(payment.pubkey);
 
-      console.log(account);
       if (account) {
         // Update existing account
-        account.subscription = subscription;
-        account.username = invoice.username || account.username;
-        account = await accountService.updateAccount(account);
+        //account.subscription = subscription;
+        account.username = payment.username || account.username;
+        account.updatedAt = new Date();
+        account = await accountRepository.update(account);
       } else {
-        console.log(JSON.stringify({
-          pubkey: invoice.pubkey,
-          username: invoice.username,
-          subscription,
-        }, null, 2));
         // Create new account
-        account = await accountService.addAccount({
-          pubkey: invoice.pubkey,
-          username: invoice.username,
-          subscription,
+        const now = new Date();
+
+        account = await accountRepository.create({
+          pubkey: payment.pubkey,
+          username: payment.username,
+          createdAt: now,
+          updatedAt: now,
+          //subscription,
         });
       }
       // Mark invoice as paid
-      const updatedInvoice = await paymentService.markInvoiceAsPaid(invoice.id);
+      const now = new Date();
+      await paymentRepository.update({
+        ...payment,
+        isPaid: true,
+        paidAt: now,
+        updatedAt: now,
+      })
 
-      logger.info(`Payment completed for ${invoice.pubkey}, tier: ${invoice.tier}, creating/updating account`);
+      logger.info(`Payment completed for ${payment.pubkey}, tier: ${payment.tier}, creating/updating account`);
 
-      return res.json(toPaymentDto(invoice, 'paid'));
+      return res.json(toPaymentDto(payment, 'paid'));
     }
 
-    return res.json(toPaymentDto(invoice, 'pending'));
+    return res.json(toPaymentDto(payment, 'pending'));
 
   } catch (error) {
     logger.error('Error checking payment status:', error);

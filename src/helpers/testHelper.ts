@@ -1,5 +1,7 @@
 import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "nostr-tools";
 import { Account } from "../models/account";
+import { Payment } from "../models/payment";
+import { BillingCycle } from "../config/types";
 
 export const generateNIP98 = async (method = 'GET') => {
   const keyPair = generateKeyPair()
@@ -27,6 +29,28 @@ export const testAccount = (partial?: { pubkey?: string, username?: string }): A
   updatedAt: new Date(),
   ...partial,
 });
+
+export const testPayment = (partial?: Partial<Payment>): Payment => {
+  const now = new Date();
+
+  return {
+    id: 'test-uuid-id',
+    type: 'ln',
+    lnHash: 'test-hash',
+    lnInvoice: 'lnbc1234567890',
+    lnAmountSat: 22200,
+    tier: 'premium',
+    billingCycle: 'monthly',
+    priceCents: 999,
+    pubkey: generateKeyPair().npub,
+    username: 'testuser',
+    isPaid: false,
+    createdAt: now,
+    updatedAt: now,
+    expiresAt: new Date(Date.now() + 5000),
+    ...partial,
+  }
+};
 
 // Helper function to create a mock iterator
 export const createMockIterator = (values: any[]) => ({
