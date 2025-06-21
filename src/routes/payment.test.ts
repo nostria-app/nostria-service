@@ -35,7 +35,8 @@ const mockLightningService = lightningService as jest.Mocked<typeof lightningSer
 import { v4 } from 'uuid';
 import config from '../config';
 import { Payment } from '../models/payment';
-import { generateKeyPair, testPayment } from '../helpers/testHelper';
+import { generateKeyPair, testAccount, testPayment } from '../helpers/testHelper';
+import { AccountSubscription } from '../models/accountSubscription';
 
 
 describe('Payment Routes', () => {
@@ -205,12 +206,7 @@ describe('Payment Routes', () => {
 
       // Mock account service
       mockAccountRepository.getByPubKey.mockResolvedValue(null);
-      mockAccountRepository.create.mockResolvedValue({
-        pubkey: 'npub1234567890',
-        username: 'testuser',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      mockAccountRepository.create.mockResolvedValue(testAccount());
 
       const response = await request(app)
         .get('/api/payment/test-id')
@@ -228,13 +224,14 @@ describe('Payment Routes', () => {
     });
 
     it('should update existing account when payment is confirmed', async () => {
-      const existingAccount = {
+      const accountSubscription: AccountSubscription = { tier: 'free' as Tier, entitlements: config.tiers.free.entitlements }
+      const existingAccount = testAccount({
         pubkey: 'npub1234567890',
         username: 'olduser',
-        subscription: { tier: 'free' as Tier, entitlements: config.tiers.free.entitlements },
+        subscription: JSON.stringify(accountSubscription),
         createdAt: new Date(),
         updatedAt: new Date(),
-      };
+      });
 
       mockPaymentRepository.get.mockResolvedValue(mockInvoice);
 

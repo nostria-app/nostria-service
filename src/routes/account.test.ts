@@ -118,6 +118,7 @@ describe('Account API', () => {
       mockAccountRepository.create.mockResolvedValueOnce({
         pubkey: account.pubkey,
         username: 'bla',
+        tier: 'free',
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -134,6 +135,7 @@ describe('Account API', () => {
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
         username: account.username,
+        tier: 'free',
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
@@ -166,12 +168,12 @@ describe('Account API', () => {
       expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
+        tier: 'free',
         username: undefined,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
       expect(response.body).toEqual({
-        username: account.username,
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
       });

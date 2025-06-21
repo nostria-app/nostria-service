@@ -22,9 +22,11 @@ export const generateKeyPair = () => {
   }
 }
 
-export const testAccount = (partial?: { pubkey?: string, username?: string }): Account => ({
+export const testAccount = (partial?: Partial<Account>): Account => ({
   pubkey: generateKeyPair().npub,
   username: 'bla',
+  tier: 'free',
+  expiresAt: new Date(Date.now() + 1000000),
   createdAt: new Date(),
   updatedAt: new Date(),
   ...partial,

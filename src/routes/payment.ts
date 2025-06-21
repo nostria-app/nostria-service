@@ -9,6 +9,7 @@ import { Tier, BillingCycle } from '../config/types';
 import paymentRepository from '../database/paymentRepository';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
+import { AccountSubscription, expiresAt } from '../models/accountSubscription';
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
@@ -278,7 +279,7 @@ router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: 
     if (paid) {
       // Create or update user account with subscription
       const tierDetails = config.tiers[payment.tier];
-      const subscription = {
+      const subscription: AccountSubscription = {
         tier: payment.tier,
         billingCycle: payment.billingCycle,
         price: {
@@ -296,6 +297,9 @@ router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: 
         //account.subscription = subscription;
         account.username = payment.username || account.username;
         account.updatedAt = new Date();
+        account.tier = payment.tier;
+        account.subscription = JSON.stringify(subscription)
+        account.expiresAt = expiresAt(payment.billingCycle)
         account = await accountRepository.update(account);
       } else {
         // Create new account
@@ -306,7 +310,9 @@ router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: 
           username: payment.username,
           createdAt: now,
           updatedAt: now,
-          //subscription,
+          tier: payment.tier,
+          subscription: JSON.stringify(subscription),
+          expiresAt: expiresAt(payment.billingCycle),
         });
       }
       // Mark invoice as paid

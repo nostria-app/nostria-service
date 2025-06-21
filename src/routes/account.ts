@@ -383,6 +383,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     const account = await accountRepository.create({
       pubkey,
       username,
+      tier: 'free',
       createdAt: now,
       updatedAt: now,
     });
