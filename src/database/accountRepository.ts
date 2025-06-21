@@ -1,56 +1,15 @@
-import { BillingCycle, Price, Tier, Entitlements, tiers } from "./account/tiers";
-import BaseTableStorageService, { escapeODataValue } from "./BaseTableStorageService";
+import { Account } from "../models/account";
+import BaseRepository, { escapeODataValue } from "./BaseRepository";
 
-export interface Subscription {
-  tier: Tier;
-  expiryDate?: Date;
-  billingCycle?: BillingCycle;
-  price?: Price;
-  entitlements: Entitlements;
-};
-
-export interface Account {
-  pubkey: string;
-  email?: string;
-  username?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  lastLoginDate?: Date;
-  subscription: Subscription;
-}
-
-type CreateAccountDto = {
-  pubkey: string;
-  email?: string;
-  username?: string;
-  subscription?: Subscription;
-}
-
-export const DEFAULT_SUBSCRIPTION: Subscription = {
-  tier: 'free',
-  entitlements: tiers['free'].entitlements,
-};
-
-class AccountService extends BaseTableStorageService<Account> {
+class AccountRepository extends BaseRepository<Account> {
   constructor() {
     super("accounts");
   }
 
-  async addAccount({ pubkey, username, email, subscription }: CreateAccountDto): Promise<Account> {
-    const now = new Date();
-
-    const account: Account = {
-      pubkey,
-      email,
-      username,
-      subscription: subscription || DEFAULT_SUBSCRIPTION,
-      createdAt: now,
-      updatedAt: now,
-    };
-
+  async create(account: Account): Promise<Account> {
     await this.tableClient.upsertEntity({
       partitionKey: 'account',
-      rowKey: pubkey,
+      rowKey: account.pubkey,
       ...account,
     }, 'Replace')
 
@@ -71,7 +30,7 @@ class AccountService extends BaseTableStorageService<Account> {
     }
   }
 
-  async updateAccount(account: Account): Promise<Account> {
+  async update(account: Account): Promise<Account> {
     // If username is being set or changed, check for uniqueness
     if (account.username) {
       const isTaken = await this.isUsernameTaken(account.username, account.pubkey);
@@ -80,25 +39,20 @@ class AccountService extends BaseTableStorageService<Account> {
       }
     }
 
-    const updated: Account = {
-      ...account,
-      updatedAt: new Date()
-    };
-
     await this.tableClient.upsertEntity({
       partitionKey: 'account',
       rowKey: account.pubkey,
-      ...updated,
+      ...account,
     }, 'Replace');
 
-    return updated;
+    return account;
   }
 
-  async getAccount(pubkey: string): Promise<Account | null> {
+  async getByPubKey(pubkey: string): Promise<Account | null> {
     return this.getEntity('account', pubkey)
   }
 
-  async getAccountByUsername(username: string): Promise<Account | null> {
+  async getByUsername(username: string): Promise<Account | null> {
     try {
       // Ineffective query.
       // TODO: either needs a second row `{ rowKey: username, pubkey }` and 
@@ -111,4 +65,4 @@ class AccountService extends BaseTableStorageService<Account> {
   }
 }
 
-export default new AccountService();
+export default new AccountRepository();

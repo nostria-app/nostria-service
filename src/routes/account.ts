@@ -3,10 +3,11 @@ import assert from 'node:assert';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
-import accountService, { Account, Subscription } from '../services/AccountService';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
 import { tiers, features as featureLabels } from '../services/account/tiers';
+import accountRepository from '../database/accountRepository';
+import { Account } from '../models/account';
 
 /**
  * @openapi
@@ -106,7 +107,6 @@ interface AccountDto {
   username?: string;
   signupDate: Date;
   lastLoginDate?: Date;
-  subscription?: Subscription;
 }
 
 /**
@@ -121,12 +121,12 @@ interface AccountDto {
  *         pubkey:
  *           type: string
  *           description: User's public key
- *         email:
+ *         username:
  *           type: string
  *           nullable: true
- *           description: User's email address
+ *           description: User's username
  */
-type AddAccountRequest = Request<{}, any, { pubkey: string, email?: string }, any>
+type AddAccountRequest = Request<{}, any, { pubkey: string, username?: string }, any>
 type AddAccountResponse = Response<AccountDto | ErrorBody>
 
 type GetAccountRequest = NIP98AuthenticatedRequest;
@@ -161,16 +161,12 @@ type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBo
  *     UpdateAccountRequest:
  *       type: object
  *       properties:
- *         email:
- *           type: string
- *           nullable: true
- *           description: User's email address
  *         username:
  *           type: string
  *           nullable: true
  *           description: User's username
  */
-type UpdateAccountRequest = NIP98AuthenticatedRequest<{}, any, Partial<Account>, any>
+type UpdateAccountRequest = NIP98AuthenticatedRequest<{}, any, Pick<Account, 'username'>, any>
 type UpdateAccountResponse = Response<AccountDto | ErrorBody>
 
 /**
@@ -185,12 +181,10 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, email, username, createdAt, subscription, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, username, createdAt, lastLoginDate }: Account): AccountDto => ({
   pubkey,
-  email,
   username,
   signupDate: createdAt,
-  subscription,
   lastLoginDate,
 });
 
@@ -369,21 +363,28 @@ router.get('/tiers', (req: Request, res: Response) => {
  */
 router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
-    const { pubkey, email } = req.body;
+    const { pubkey, username } = req.body;
 
     if (!pubkey) {
       return res.status(400).json({ error: 'Public key is required' });
     }
 
     // Check if user already exists
-    const existingAccount = await accountService.getAccount(pubkey);
+    const existingAccount = await accountRepository.getByPubKey(pubkey);
     if (existingAccount) {
       return res.status(409).json({ error: 'Account already exists' });
     }
 
-    const account = await accountService.addAccount({ pubkey, email });
+    const now = new Date();
 
-    logger.info(`New account signup: ${pubkey.substring(0, 16)}... with email: ${email || 'none'}`);
+    const account = await accountRepository.create({
+      pubkey,
+      username,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
 
     return res.status(201).json(toAccountDto(account));
   } catch (error: any) {
@@ -444,9 +445,9 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
 
     let account: Account | null;
     if (isValidNpub(needle)) {
-      account = await accountService.getAccount(needle);
+      account = await accountRepository.getByPubKey(needle);
     } else {
-      account = await accountService.getAccountByUsername(needle);
+      account = await accountRepository.getByUsername(needle);
     }
 
     if (!account) {
@@ -519,7 +520,7 @@ router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
 
-    const account = await accountService.getAccount(pubkey);
+    const account = await accountRepository.getByPubKey(pubkey);
     if (!account) {
       return res.status(404).json({ error: 'Profile not found' });
     }
@@ -592,19 +593,18 @@ router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountRe
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
 
-    const { email, username } = req.body;
+    const { username } = req.body;
 
     // Get current account
-    const currentAccount = await accountService.getAccount(pubkey);
+    const currentAccount = await accountRepository.getByPubKey(pubkey);
     if (!currentAccount) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
     try {
       // Update account with new data
-      const updatedAccount = await accountService.updateAccount({
+      const updatedAccount = await accountRepository.update({
         ...currentAccount,
-        email: email ?? currentAccount.email,
         username: username ?? currentAccount.username,
       });
 

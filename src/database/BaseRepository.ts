@@ -18,7 +18,7 @@ export const escapeODataValue = (value: ValueType): string => {
   }
 }
 
-export class BaseTableStorageService<T extends object> {
+export class BaseRepository<T extends object> {
   protected tableName: string;
   protected serviceClient!: TableServiceClient;
   protected tableClient!: TableClient;
@@ -135,4 +135,4 @@ export class BaseTableStorageService<T extends object> {
   }
 }
 
-export default BaseTableStorageService; 
+export default BaseRepository; 

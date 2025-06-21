@@ -1,5 +1,5 @@
 import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "nostr-tools";
-import { Account, DEFAULT_SUBSCRIPTION } from "../services/AccountService";
+import { Account } from "../models/account";
 
 export const generateNIP98 = async (method = 'GET') => {
   const keyPair = generateKeyPair()
@@ -20,11 +20,9 @@ export const generateKeyPair = () => {
   }
 }
 
-export const testAccount = (partial?: { pubkey?: string, email?: string, username?: string }): Account => ({
+export const testAccount = (partial?: { pubkey?: string, username?: string }): Account => ({
   pubkey: generateKeyPair().npub,
-  email: 'test@email.com',
   username: 'bla',
-  subscription: DEFAULT_SUBSCRIPTION,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...partial,

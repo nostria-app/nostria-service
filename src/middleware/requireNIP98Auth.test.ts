@@ -1,4 +1,4 @@
-jest.mock('../services/BaseTableStorageService')
+jest.mock('../database/BaseRepository')
 import { Request, Response, NextFunction } from 'express';
 import requireNIP98Auth from './requireNIP98Auth';
 import { generateNIP98 } from '../helpers/testHelper';
