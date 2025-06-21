@@ -21,7 +21,6 @@ export interface Payment {
   
   // User
   pubkey: string;
-  username?: string;
   
   updatedAt: Date;
   createdAt: Date;

@@ -45,7 +45,6 @@ export const testPayment = (partial?: Partial<Payment>): Payment => {
     billingCycle: 'monthly',
     priceCents: 999,
     pubkey: generateKeyPair().npub,
-    username: 'testuser',
     isPaid: false,
     createdAt: now,
     updatedAt: now,

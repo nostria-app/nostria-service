@@ -7,6 +7,7 @@ const BasicFeatures: Feature[] = [
 
 const PremiumFeatures: Feature[] = [
   ...BasicFeatures,
+  'USERNAME',
   'ADVANCED_FILTERING',
   'PRIORITY_SUPPORT',
   'CUSTOM_TEMPLATES'

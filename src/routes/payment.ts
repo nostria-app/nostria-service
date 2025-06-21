@@ -47,16 +47,12 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  *         pubkey:
  *           type: string
  *           description: User's public key in npub format
- *         username:
- *           type: string
- *           description: Optional username
  */
 interface CreatePaymentRequest {
   tierName: Tier;
   price: number; // USD cents
   billingCycle: BillingCycle;
   pubkey: string; // npub format
-  username?: string;
 }
 
 /**
@@ -142,7 +138,7 @@ const toPaymentDto = ({ id, lnInvoice, expiresAt }: Payment, status: PaymentStat
  */
 router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: CreatePaymentResponseType) => {
   try {
-    const { tierName, price, billingCycle, pubkey, username } = req.body;
+    const { tierName, price, billingCycle, pubkey } = req.body;
 
     // Validate tier
     if (!config.tiers[tierName]) {
@@ -203,7 +199,6 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       billingCycle,
       priceCents: price,
       pubkey,
-      username,
       isPaid: false,
       expiresAt: new Date(now.getTime() + INVOICE_TTL),
       createdAt: now,
@@ -277,44 +272,6 @@ router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: 
     const paid = await lightningService.checkPaymentStatus(payment.lnHash);
 
     if (paid) {
-      // Create or update user account with subscription
-      const tierDetails = config.tiers[payment.tier];
-      const subscription: AccountSubscription = {
-        tier: payment.tier,
-        billingCycle: payment.billingCycle,
-        price: {
-          priceCents: payment.priceCents,
-          currency: 'USD',
-        },
-        entitlements: tierDetails.entitlements,
-      };
-
-      // Check if account exists
-      let account = await accountRepository.getByPubKey(payment.pubkey);
-
-      if (account) {
-        // Update existing account
-        //account.subscription = subscription;
-        account.username = payment.username || account.username;
-        account.updatedAt = new Date();
-        account.tier = payment.tier;
-        account.subscription = JSON.stringify(subscription)
-        account.expiresAt = expiresAt(payment.billingCycle)
-        account = await accountRepository.update(account);
-      } else {
-        // Create new account
-        const now = new Date();
-
-        account = await accountRepository.create({
-          pubkey: payment.pubkey,
-          username: payment.username,
-          createdAt: now,
-          updatedAt: now,
-          tier: payment.tier,
-          subscription: JSON.stringify(subscription),
-          expiresAt: expiresAt(payment.billingCycle),
-        });
-      }
       // Mark invoice as paid
       const now = new Date();
       await paymentRepository.update({

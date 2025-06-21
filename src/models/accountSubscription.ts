@@ -22,5 +22,7 @@ const billingCycleToDuration = (billingCycle: BillingCycle) => {
   }
 }
 
-export const expiresAt = (billingCycle: BillingCycle) => 
-  new Date(Date.now() + billingCycleToDuration(billingCycle))
+export const expiresAt = (billingCycle?: BillingCycle) => {
+  if (!billingCycle) return undefined;
+  return new Date(Date.now() + billingCycleToDuration(billingCycle));
+};

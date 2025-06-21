@@ -2,6 +2,8 @@ import request from 'supertest';
 
 import { Tier, BillingCycle } from '../config/types';
 
+import { generateKeyPair, testPayment } from '../helpers/testHelper';
+
 // Mock the services
 jest.mock('../database/BaseRepository')
 jest.mock('../routes/subscription', () => {
@@ -20,23 +22,17 @@ jest.mock('../services/LightningService');
 
 import app from '../index';
 import paymentRepository from '../database/paymentRepository';
-import accountRepository from '../database/accountRepository';
 import lightningService from '../services/LightningService';
 
 // Mock uuid
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-id'),
 }));
+import { v4 } from 'uuid';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
-const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
 const mockLightningService = lightningService as jest.Mocked<typeof lightningService>;
 
-import { v4 } from 'uuid';
-import config from '../config';
-import { Payment } from '../models/payment';
-import { generateKeyPair, testAccount, testPayment } from '../helpers/testHelper';
-import { AccountSubscription } from '../models/accountSubscription';
 
 
 describe('Payment Routes', () => {
@@ -52,7 +48,6 @@ describe('Payment Routes', () => {
       price: 999,
       billingCycle: 'monthly' as BillingCycle,
       pubkey: generateKeyPair().npub,
-      username: 'testuser',
     };
 
     it('should create a payment invoice successfully', async () => {
@@ -69,7 +64,6 @@ describe('Payment Routes', () => {
         billingCycle: validPaymentRequest.billingCycle,
         priceCents: validPaymentRequest.price,
         tier: validPaymentRequest.tierName,
-        username: validPaymentRequest.username,
       });
 
       // Mock payment service
@@ -99,7 +93,6 @@ describe('Payment Routes', () => {
         billingCycle: 'monthly',
         priceCents: 999,
         pubkey: mockInvoice.pubkey,
-        username: 'testuser',
         isPaid: false,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
@@ -198,15 +191,11 @@ describe('Payment Routes', () => {
       });
     });
 
-    it('should mark invoice as paid and create account when payment is confirmed', async () => {
+    it('should mark invoice as paid when payment is confirmed', async () => {
       mockPaymentRepository.get.mockResolvedValue(mockInvoice);
 
       // Mock LightningService payment status check
       mockLightningService.checkPaymentStatus.mockResolvedValue(true);
-
-      // Mock account service
-      mockAccountRepository.getByPubKey.mockResolvedValue(null);
-      mockAccountRepository.create.mockResolvedValue(testAccount());
 
       const response = await request(app)
         .get('/api/payment/test-id')
@@ -219,40 +208,6 @@ describe('Payment Routes', () => {
         paidAt: expect.any(Date),
         updatedAt: expect.any(Date),
       });
-      expect(mockAccountRepository.create).toHaveBeenCalledTimes(1);
-      expect(mockAccountRepository.update).not.toHaveBeenCalled();
-    });
-
-    it('should update existing account when payment is confirmed', async () => {
-      const accountSubscription: AccountSubscription = { tier: 'free' as Tier, entitlements: config.tiers.free.entitlements }
-      const existingAccount = testAccount({
-        pubkey: 'npub1234567890',
-        username: 'olduser',
-        subscription: JSON.stringify(accountSubscription),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      mockPaymentRepository.get.mockResolvedValue(mockInvoice);
-
-      // Mock LightningService payment status check
-      mockLightningService.checkPaymentStatus.mockResolvedValue(true);
-
-      // Mock account service
-      mockAccountRepository.getByPubKey.mockResolvedValue(existingAccount);
-      mockAccountRepository.update.mockResolvedValue({
-        ...existingAccount,
-        username: 'testuser',
-        updatedAt: new Date(),
-      });
-
-      const response = await request(app)
-        .get('/api/payment/test-id')
-        .expect(200);
-
-      expect(response.body).toHaveProperty('status', 'paid');
-      expect(mockAccountRepository.create).not.toHaveBeenCalled();
-      expect(mockAccountRepository.update).toHaveBeenCalledTimes(1);
     });
 
     it('should return unpaid status when payment is not confirmed', async () => {

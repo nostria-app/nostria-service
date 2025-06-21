@@ -9,6 +9,8 @@ import config from '../config';
 import { features } from '../config/features';
 import accountRepository from '../database/accountRepository';
 import { Account } from '../models/account';
+import paymentRepository from '../database/paymentRepository';
+import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 
 
 /**
@@ -127,8 +129,12 @@ interface AccountDto {
  *           type: string
  *           nullable: true
  *           description: User's username
+ *         paymentId:
+ *           type: string
+ *           nullable: true
+ *           description: Payment Id for the premium payment
  */
-type AddAccountRequest = Request<{}, any, { pubkey: string, username?: string }, any>
+type AddAccountRequest = Request<{}, any, { pubkey: string, username?: string, paymentId?: string }, any>
 type AddAccountResponse = Response<AccountDto | ErrorBody>
 
 type GetAccountRequest = NIP98AuthenticatedRequest;
@@ -366,7 +372,7 @@ router.get('/tiers', (req: Request, res: Response) => {
  */
 router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
-    const { pubkey, username } = req.body;
+    const { pubkey, username, paymentId } = req.body;
 
     if (!pubkey) {
       return res.status(400).json({ error: 'Public key is required' });
@@ -378,15 +384,46 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       return res.status(409).json({ error: 'Account already exists' });
     }
 
+    let subscription: AccountSubscription = DEFAULT_SUBSCRIPTION;
+
+    if (paymentId) {
+      const payment = await paymentRepository.get(paymentId);
+      if (!payment) {
+        return res.status(400).json({ error: 'No such payment' });
+      }
+
+      if (payment.pubkey !== pubkey) {
+        return res.status(400).json({ error: 'Payment is for different pubkey' });
+      }
+
+      // Create or update user account with subscription
+      const tierDetails = config.tiers[payment.tier];
+      subscription = {
+        tier: payment.tier,
+        billingCycle: payment.billingCycle,
+        price: {
+          priceCents: payment.priceCents,
+          currency: 'USD',
+        },
+        entitlements: tierDetails.entitlements,
+      };
+    }
+
     const now = new Date();
 
-    const account = await accountRepository.create({
+    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');
+
+    const account = {
       pubkey,
-      username,
-      tier: 'free',
+      username: canHaveUsername ? username : undefined,
       createdAt: now,
       updatedAt: now,
-    });
+      tier: subscription.tier,
+      subscription: JSON.stringify(subscription),
+      expiresAt: expiresAt(subscription.billingCycle),
+    };
+    
+    await accountRepository.create(account);
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
 
