@@ -134,6 +134,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         tier: 'free',
         subscription: DEFAULT_SUBSCRIPTION,
+        expiresAt: undefined,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date), // test sets the same as createdAt
       });

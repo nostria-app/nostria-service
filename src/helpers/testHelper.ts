@@ -1,7 +1,6 @@
 import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "nostr-tools";
 import { Account } from "../models/account";
 import { Payment } from "../models/payment";
-import { BillingCycle } from "../config/types";
 import { DEFAULT_SUBSCRIPTION } from "../models/accountSubscription";
 
 export const generateNIP98 = async (method = 'GET') => {

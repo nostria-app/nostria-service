@@ -2,18 +2,17 @@ import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
-import accountRepository from '../database/accountRepository';
 import { ErrorBody } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
 import paymentRepository from '../database/paymentRepository';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
-import { AccountSubscription, expiresAt } from '../models/accountSubscription';
+
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
-  30, // limit each IP to 10 payment requests per minute
+  30, // limit each IP to 30 payment requests per minute
   'Too many payment requests from this IP, please try again later.'
 );
 
