@@ -1,11 +1,11 @@
 import { Tier } from "../config/types";
+import { AccountSubscription } from "./accountSubscription";
 
 export interface Account {
   pubkey: string;
   username?: string;
   tier: Tier;
-  // TODO: make it a proper object once we move to Cosmos DB
-  subscription?: string; // stringifed AccountSubscription
+  subscription: AccountSubscription;
   expiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;

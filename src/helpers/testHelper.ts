@@ -2,6 +2,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "no
 import { Account } from "../models/account";
 import { Payment } from "../models/payment";
 import { BillingCycle } from "../config/types";
+import { DEFAULT_SUBSCRIPTION } from "../models/accountSubscription";
 
 export const generateNIP98 = async (method = 'GET') => {
   const keyPair = generateKeyPair()
@@ -26,6 +27,7 @@ export const testAccount = (partial?: Partial<Account>): Account => ({
   pubkey: generateKeyPair().npub,
   username: 'bla',
   tier: 'free',
+  subscription: DEFAULT_SUBSCRIPTION,
   expiresAt: new Date(Date.now() + 1000000),
   createdAt: new Date(),
   updatedAt: new Date(),

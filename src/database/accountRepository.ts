@@ -11,6 +11,7 @@ class AccountRepository extends BaseRepository<Account> {
       partitionKey: 'account',
       rowKey: account.pubkey,
       ...account,
+      subscription: account.subscription ? JSON.stringify(account.subscription) : undefined,
     }, 'Replace')
 
     return account;
@@ -43,13 +44,18 @@ class AccountRepository extends BaseRepository<Account> {
       partitionKey: 'account',
       rowKey: account.pubkey,
       ...account,
+      subscription: account.subscription ? JSON.stringify(account.subscription) : undefined,
     }, 'Replace');
 
     return account;
   }
 
   async getByPubKey(pubkey: string): Promise<Account | null> {
-    return this.getEntity('account', pubkey)
+    const account = await this.getEntity('account', pubkey);
+    if (account) {
+      account.subscription = account.subscription ? JSON.parse(account.subscription as any as string) : undefined;
+    }
+    return account;
   }
 
   async getByUsername(username: string): Promise<Account | null> {
@@ -58,7 +64,9 @@ class AccountRepository extends BaseRepository<Account> {
       // TODO: either needs a second row `{ rowKey: username, pubkey }` and 
       // then a second query or move to Cosmos DB with secondary index on `username`
       const entities = await this.queryEntities(`username eq ${escapeODataValue(username)}`);
-      return entities.length > 0 ? entities[0] : null;
+      if (entities.length === 0) return null;
+      entities[0].subscription = entities[0].subscription ? JSON.parse(entities[0].subscription as any as string) : undefined;
+      return entities[0];
     } catch (error) {
       throw new Error(`Failed to get account by username: ${(error as Error).message}`);
     }

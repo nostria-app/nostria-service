@@ -11,6 +11,7 @@ import accountRepository from '../database/accountRepository';
 import { Account } from '../models/account';
 import paymentRepository from '../database/paymentRepository';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
+import { Entitlements, Tier } from '../config/types';
 
 
 /**
@@ -87,10 +88,6 @@ interface PublicAccountDto {
  *         pubkey:
  *           type: string
  *           description: User's public key
- *         email:
- *           type: string
- *           nullable: true
- *           description: User's email address
  *         username:
  *           type: string
  *           nullable: true
@@ -104,13 +101,18 @@ interface PublicAccountDto {
  *           format: date-time
  *           nullable: true
  *           description: Last login date
- */
+ *         tier:
+ *           $ref: '#/components/schemas/Tier'
+ *         entitlements:
+ *           $ref: '#/components/schemas/Entitlements'
+*/
 interface AccountDto {
   pubkey: string;
-  email?: string;
   username?: string;
   signupDate: Date;
   lastLoginDate?: Date;
+  tier: Tier;
+  entitlements: Entitlements;
 }
 
 /**
@@ -189,11 +191,13 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, username, createdAt, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, username, createdAt, tier, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
   signupDate: createdAt,
   lastLoginDate,
+  tier,
+  entitlements: subscription?.entitlements,
 });
 
 /**
@@ -419,7 +423,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       createdAt: now,
       updatedAt: now,
       tier: subscription.tier,
-      subscription: JSON.stringify(subscription),
+      subscription,
       expiresAt: expiresAt(subscription.billingCycle),
     };
     

@@ -133,7 +133,7 @@ describe('Account API', () => {
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
         tier: 'free',
-        subscription: JSON.stringify(DEFAULT_SUBSCRIPTION),
+        subscription: DEFAULT_SUBSCRIPTION,
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date), // test sets the same as createdAt
       });
@@ -142,6 +142,8 @@ describe('Account API', () => {
 
       expect(response.body).toEqual({
         pubkey: account.pubkey,
+        tier: 'free',
+        entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
       });
     });
@@ -169,7 +171,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         tier: mockPayment.tier,
         username: account.username,
-        subscription: JSON.stringify({
+        subscription: {
           tier: mockPayment.tier,
           billingCycle: mockPayment.billingCycle,
           price: {
@@ -177,7 +179,7 @@ describe('Account API', () => {
             currency: 'USD',
           },
           entitlements: config.tiers['premium'].entitlements,
-        }),
+        },
         expiresAt: expect.any(Date),
         createdAt: expect.any(Date),
         updatedAt: expect.any(Date),
@@ -186,6 +188,8 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         pubkey: account.pubkey,
         username: account.username,
+        tier: mockPayment.tier,
+        entitlements: config.tiers['premium'].entitlements,
         signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
       });
     });
@@ -266,6 +270,8 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         pubkey: account.pubkey,
         username: account.username,
+        tier: 'free',
+        entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: account.createdAt.toISOString(),
       });
 
@@ -333,6 +339,8 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
+        tier: 'free',
+        entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.createdAt.toISOString(),
       });
 
@@ -375,6 +383,8 @@ describe('Account API', () => {
       expect(response.body).toEqual({
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
+        tier: 'free',
+        entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.createdAt.toISOString(),
       });
 
