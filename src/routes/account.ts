@@ -5,9 +5,14 @@ import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
-import { tiers, features as featureLabels } from '../services/account/tiers';
+import config from '../config';
+import { features } from '../config/features';
 import accountRepository from '../database/accountRepository';
 import { Account } from '../models/account';
+import paymentRepository from '../database/paymentRepository';
+import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
+import { Entitlements, Tier } from '../config/types';
+
 
 /**
  * @openapi
@@ -83,10 +88,6 @@ interface PublicAccountDto {
  *         pubkey:
  *           type: string
  *           description: User's public key
- *         email:
- *           type: string
- *           nullable: true
- *           description: User's email address
  *         username:
  *           type: string
  *           nullable: true
@@ -100,13 +101,18 @@ interface PublicAccountDto {
  *           format: date-time
  *           nullable: true
  *           description: Last login date
- */
+ *         tier:
+ *           $ref: '#/components/schemas/Tier'
+ *         entitlements:
+ *           $ref: '#/components/schemas/Entitlements'
+*/
 interface AccountDto {
   pubkey: string;
-  email?: string;
   username?: string;
   signupDate: Date;
   lastLoginDate?: Date;
+  tier: Tier;
+  entitlements: Entitlements;
 }
 
 /**
@@ -125,8 +131,12 @@ interface AccountDto {
  *           type: string
  *           nullable: true
  *           description: User's username
+ *         paymentId:
+ *           type: string
+ *           nullable: true
+ *           description: Payment Id for the premium payment
  */
-type AddAccountRequest = Request<{}, any, { pubkey: string, username?: string }, any>
+type AddAccountRequest = Request<{}, any, { pubkey: string, username?: string, paymentId?: string }, any>
 type AddAccountResponse = Response<AccountDto | ErrorBody>
 
 type GetAccountRequest = NIP98AuthenticatedRequest;
@@ -181,11 +191,13 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, username, createdAt, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, username, createdAt, tier, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
   signupDate: createdAt,
   lastLoginDate,
+  tier,
+  entitlements: subscription?.entitlements,
 });
 
 /**
@@ -289,9 +301,10 @@ const toAccountDto = ({ pubkey, username, createdAt, lastLoginDate }: Account): 
  */
 router.get('/tiers', (req: Request, res: Response) => {
   try {
+    
     // Map features to include human-readable labels
     const tiersWithLabels = Object.fromEntries(
-      Object.entries(tiers)
+      Object.entries(config.tiers)
         .filter(([tierKey]) => tierKey !== 'free')
         .map(([tierKey, tierValue]) => [
           tierKey,
@@ -301,7 +314,7 @@ router.get('/tiers', (req: Request, res: Response) => {
               ...tierValue.entitlements,
               features: tierValue.entitlements.features.map((feature) => ({
                 key: feature,
-                label: featureLabels[feature].label,
+                label: features[feature].label,
               })),
             },
           },
@@ -363,7 +376,7 @@ router.get('/tiers', (req: Request, res: Response) => {
  */
 router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
-    const { pubkey, username } = req.body;
+    const { pubkey, username, paymentId } = req.body;
 
     if (!pubkey) {
       return res.status(400).json({ error: 'Public key is required' });
@@ -375,14 +388,46 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       return res.status(409).json({ error: 'Account already exists' });
     }
 
+    let subscription: AccountSubscription = DEFAULT_SUBSCRIPTION;
+
+    if (paymentId) {
+      const payment = await paymentRepository.get(paymentId);
+      if (!payment) {
+        return res.status(400).json({ error: 'No such payment' });
+      }
+
+      if (payment.pubkey !== pubkey) {
+        return res.status(400).json({ error: 'Payment is for different pubkey' });
+      }
+
+      // Create or update user account with subscription
+      const tierDetails = config.tiers[payment.tier];
+      subscription = {
+        tier: payment.tier,
+        billingCycle: payment.billingCycle,
+        price: {
+          priceCents: payment.priceCents,
+          currency: 'USD',
+        },
+        entitlements: tierDetails.entitlements,
+      };
+    }
+
     const now = new Date();
 
-    const account = await accountRepository.create({
+    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');
+
+    const account = {
       pubkey,
-      username,
+      username: canHaveUsername ? username : undefined,
       createdAt: now,
       updatedAt: now,
-    });
+      tier: subscription.tier,
+      subscription,
+      expiresAt: expiresAt(subscription.billingCycle),
+    };
+    
+    await accountRepository.create(account);
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
 
