@@ -16,6 +16,7 @@ import notificationRoutes from './routes/notification';
 import statusRoutes from './routes/status';
 import keyRoutes from './routes/key';
 import paymentRoutes from './routes/payment';
+import backupRoutes from './routes/backup';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -43,7 +44,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Swagger UI
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Serve raw Swagger JSON
 app.get('/openapi.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
@@ -60,6 +61,7 @@ app.use('/api/status', statusRoutes);
 app.use('/api/key', keyRoutes);
 app.use('/api/account', account);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/backup', backupRoutes); // Backup management endpoints
 
 // Error handling middleware
 app.use(notFoundHandler);
