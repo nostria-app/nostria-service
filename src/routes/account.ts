@@ -54,7 +54,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
  * @openapi
  * components:
  *   schemas:
- *     PublicAccountDto:
+ *     PublicAccount:
  *       type: object
  *       properties:
  *         pubkey:
@@ -82,7 +82,7 @@ interface PublicAccountDto {
  * @openapi
  * components:
  *   schemas:
- *     AccountDto:
+ *     Account:
  *       type: object
  *       properties:
  *         pubkey:
@@ -160,7 +160,7 @@ type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string}, any, any, an
  *           type: string
  *           description: Optional message about the response
  *         result:
- *           $ref: '#/components/schemas/PublicAccountDto'
+ *           $ref: '#/components/schemas/PublicAccount'
  */
 type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBody>
 
@@ -210,6 +210,7 @@ const toAccountDto = ({ pubkey, username, createdAt, tier, subscription, lastLog
  *       enum:
  *         - BASIC_WEBPUSH
  *         - COMMUNITY_SUPPORT
+ *         - USERNAME
  *         - ADVANCED_FILTERING
  *         - PRIORITY_SUPPORT
  *         - CUSTOM_TEMPLATES
@@ -348,7 +349,7 @@ router.get('/tiers', (req: Request, res: Response) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AccountDto'
+ *               $ref: '#/components/schemas/Account'
  *       '400':
  *         description: Invalid request
  *         content:
@@ -534,7 +535,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AccountDto'
+ *               $ref: '#/components/schemas/Account'
  *       '401':
  *         description: Unauthorized
  *         content:
@@ -601,7 +602,7 @@ router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/AccountDto'
+ *               $ref: '#/components/schemas/Account'
  *       '401':
  *         description: Unauthorized
  *         content:
