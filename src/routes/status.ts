@@ -11,7 +11,7 @@ const router = express.Router();
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const status = {
-      service: 'Nostria Notification Service',
+      service: 'Nostria Service',
       version: process.env.npm_package_version || '1.0.0',
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || 'development',

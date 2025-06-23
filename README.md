@@ -1,3 +1,3 @@
-# Nostria Notification
+# Nostria Service
 
-Notification Service for Nostria
+Backend Service for Nostria
