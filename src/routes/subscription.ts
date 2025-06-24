@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import tableStorage from '../utils/tableStorage';
+import notificationService from '../database/notificationService';
 import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
@@ -51,7 +51,7 @@ router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> 
   const { pubkey } = req.params;
   const notification: NotificationData = req.body;
 
-  const records = await tableStorage.getUserEntities(pubkey);
+  const records = await notificationService.getUserEntities(pubkey);
 
   for (const record of records) {
     const sub = JSON.parse(record.subscription);
@@ -115,10 +115,8 @@ router.post('/webpush/:pubkey', async (req: Request, res: Response): Promise<voi
     }
 
     // Use p256dh as the rowKey to allow multiple devices per user
-    const rowKey = subscription.keys.p256dh;
-
-    // Store the subscription in Azure Table Storage
-    await tableStorage.upsertEntity(pubkey, rowKey, {
+    const rowKey = subscription.keys.p256dh;    // Store the subscription in CosmosDB
+    await notificationService.upsertEntity(pubkey, rowKey, {
       subscription: JSON.stringify(subscription),
     });
 
@@ -185,11 +183,9 @@ router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<vo
     if (!pubkey) {
       res.status(400).json({ error: 'Invalid pubkey' });
       return;
-    }
-
-    // Check if user has premium subscription for custom filters
+    }    // Check if user has premium subscription for custom filters
     // TODO: Enable this when premium subscriptions are implemented
-    // const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
+    // const isPremium = await notificationService.hasPremiumSubscription(pubkey);
 
     // // Non-premium users can only update basic settings
     // if (!isPremium && settings.filters) {
@@ -201,10 +197,8 @@ router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<vo
 
     console.log('PUBKEY:', pubkey);
 
-    // settings = [];
-
-    // Store the settings in the settings table
-    await tableStorage.upsertNotificationSettings(pubkey, {
+    // settings = [];    // Store the settings in CosmosDB
+    await notificationService.upsertNotificationSettings(pubkey, {
       settings: JSON.stringify(settings),
     });
 
@@ -248,14 +242,12 @@ router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void
     if (!pubkey) {
       res.status(400).json({ error: 'Invalid pubkey' });
       return;
-    }
-
-    // Get all user subscription entities
-    const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+    }    // Get all user subscription entities
+    const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
 
     // Extract relevant info from subscription entities
     const devices: DeviceInfo[] = subscriptionEntities
-      .map(entity => {
+      .map((entity: any) => {
         const subscription = JSON.parse(entity.subscription);
         return {
           deviceId: entity.rowKey,
@@ -305,13 +297,9 @@ router.get('/settings/:pubkey', async (req: Request, res: Response): Promise<voi
     if (!pubkey) {
       res.status(400).json({ error: 'Invalid pubkey' });
       return;
-    }
-
-    // Get user settings from the settings table
-    const settings = await tableStorage.getNotificationSettings(pubkey);
-
-    // Check if user has premium subscription
-    // const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
+    }    // Get user settings from CosmosDB
+    const settings = await notificationService.getNotificationSettings(pubkey);    // Check if user has premium subscription
+    // const isPremium = await notificationService.hasPremiumSubscription(pubkey);
 
     if (!settings) {
       res.status(200).json({
@@ -319,10 +307,8 @@ router.get('/settings/:pubkey', async (req: Request, res: Response): Promise<voi
         // isPremium
       });
       return;
-    }
-
-    // Remove internal fields
-    const { partitionKey, rowKey, timestamp, ...userSettings } = settings;
+    }    // Remove internal fields
+    const { partitionKey, rowKey, timestamp, ...userSettings } = settings || {};
 
     res.status(200).json({
       ...userSettings,
@@ -363,15 +349,13 @@ router.delete('/webpush/:pubkey/:deviceKey', async (req: Request, res: Response)
       return;
     }
 
-    const entity = await tableStorage.getEntity(pubkey, deviceKey);
+    const entity = await notificationService.getEntity(pubkey, deviceKey);
 
     if (!entity) {
       res.status(404).json({ error: 'Subscription not found' });
       return;
-    }
-
-    // Delete the subscription from Azure Table Storage
-    await tableStorage.tableClient.deleteEntity(pubkey, deviceKey);
+    }    // Delete the subscription from CosmosDB
+    await notificationService.tableClient.deleteEntity(pubkey, deviceKey);
 
     logger.info(`Web Push subscription deleted for user ${pubkey}, device key: ${deviceKey.substring(0, 16)}...`);
 

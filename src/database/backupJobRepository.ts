@@ -30,7 +30,7 @@ export class BackupJobRepository {
         throw new Error('Either AZURE_COSMOSDB_CONNECTION_STRING or AZURE_COSMOSDB_ENDPOINT must be provided');
       }      
       
-      const databaseName = process.env.AZURE_COSMOSDB_DATABASE_NAME || 'nostria';
+      const databaseName = process.env.AZURE_COSMOSDB_DATABASE_NAME || 'NostriaDB';
       const containerName = process.env.AZURE_COSMOSDB_CONTAINER_NAME || 'Documents';
 
       this.database = this.client.database(databaseName);

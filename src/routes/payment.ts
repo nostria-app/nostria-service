@@ -5,7 +5,7 @@ import { createRateLimit } from '../utils/rateLimit';
 import { ErrorBody } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
-import paymentRepository from '../database/paymentRepository';
+import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
 
@@ -184,13 +184,11 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
     if (!invoice || !hash || !amountSat) {
       logger.error('Invalid invoice data received:', invoiceData);
       return res.status(500).json({ error: 'Invalid invoice data received' });
-    }
-
-    const now = new Date()
-    // Store invoice in database
+    }    const now = new Date()    // Store invoice in database
     const payment = await paymentRepository.create({
       id: invoiceId,
-      type: 'ln',
+      type: 'payment',
+      paymentType: 'ln',
       lnHash: hash,
       lnInvoice: invoice,
       lnAmountSat: amountSat,

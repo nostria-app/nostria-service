@@ -23,6 +23,8 @@ export const generateKeyPair = () => {
 }
 
 export const testAccount = (partial?: Partial<Account>): Account => ({
+  id: generateKeyPair().pubkey,
+  type: 'account',
   pubkey: generateKeyPair().npub,
   username: 'bla',
   tier: 'free',
@@ -38,7 +40,8 @@ export const testPayment = (partial?: Partial<Payment>): Payment => {
 
   return {
     id: 'test-uuid-id',
-    type: 'ln',
+    type: 'payment',
+    paymentType: 'ln',
     lnHash: 'test-hash',
     lnInvoice: 'lnbc1234567890',
     lnAmountSat: 22200,

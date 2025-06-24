@@ -5,7 +5,7 @@ import { Tier, BillingCycle } from '../config/types';
 import { generateKeyPair, testPayment } from '../helpers/testHelper';
 
 // Mock the services
-jest.mock('../database/BaseRepository')
+// Mock removed - BaseRepository no longer exists
 jest.mock('../routes/subscription', () => {
   const router = require('express').Router();
   return router;
@@ -16,12 +16,12 @@ jest.mock('../routes/notification', () => {
   return router;
 });
 
-jest.mock('../database/paymentRepository');
-jest.mock('../database/accountRepository');
+jest.mock('../database/paymentRepositoryCosmosDb');
+jest.mock('../database/accountRepositoryCosmosDb');
 jest.mock('../services/LightningService');
 
 import app from '../index';
-import paymentRepository from '../database/paymentRepository';
+import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import lightningService from '../services/LightningService';
 
 // Mock uuid

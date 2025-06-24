@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import tableStorage from '../utils/tableStorage';
+import notificationService from '../database/notificationService';
 import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 
@@ -97,7 +97,7 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
     // If no pubkeys specified, get all registered users
     if (!targetPubkeys || targetPubkeys.length === 0) {
       try {
-        targetPubkeys = await tableStorage.getAllUserPubkeys();
+        targetPubkeys = await notificationService.getAllUserPubkeys();
         logger.info(`Broadcasting notification to all ${targetPubkeys.length} registered users`);
       } catch (error) {
         logger.error(`Error getting all users: ${(error as Error).message}`);
@@ -115,9 +115,8 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
     };
     
     for (const pubkey of targetPubkeys) {
-      try {
-        // Get all subscriptions for this user
-        const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+      try {        // Get all subscriptions for this user
+        const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
         
         if (!subscriptionEntities.length) {
           results.failed.push({ pubkey, reason: 'No subscriptions found' });
@@ -245,21 +244,19 @@ router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void>
     if (!pubkey) {
       res.status(400).json({ error: 'Invalid pubkey' });
       return;
-    }
-
-    // Check subscription status - get all user's devices
-    const subscriptionEntities = await tableStorage.getUserSubscriptions(pubkey);
+    }    // Check subscription status - get all user's devices
+    const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
     const hasSubscription = subscriptionEntities.length > 0;
     const deviceCount = subscriptionEntities.length;
     
     // Check premium status
-    const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
+    const isPremium = await notificationService.hasPremiumSubscription(pubkey);
       
-    // Get notification settings from the settings table
-    const settings = await tableStorage.getNotificationSettings(pubkey);
+    // Get notification settings from CosmosDB
+    const settings = await notificationService.getNotificationSettings(pubkey);
     
     // Get 24-hour notification count
-    const notificationCount = await tableStorage.get24HourNotificationCount(pubkey);
+    const notificationCount = await notificationService.get24HourNotificationCount(pubkey);
     
     // Get daily limits based on tier
     const dailyLimit = isPremium

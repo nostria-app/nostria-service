@@ -2,7 +2,7 @@ import webpush from 'web-push';
 import fs from 'fs';
 import path from 'path';
 import logger from './logger';
-import tableStorage from './tableStorage';
+import notificationService from '../database/notificationService';
 
 interface PushSubscription {
   endpoint: string;
@@ -144,20 +144,18 @@ class WebPushService {
         logger.error(`Failed to write notification log: ${err.message}`);
       }
     });
-    
-    // Also log to database
-    // await tableStorage.logNotification(pubkey, notification);
+      // Also log to database
+    await notificationService.logNotification(pubkey, notification);
   }
 
   /**
    * Check if user can receive notifications based on their tier
    * @param pubkey - User's public key
    * @returns True if user can receive more notifications
-   */
-  async canReceiveNotification(pubkey: string): Promise<boolean> {
+   */  async canReceiveNotification(pubkey: string): Promise<boolean> {
     try {
-      const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
-      const notificationCount = await tableStorage.get24HourNotificationCount(pubkey);
+      const isPremium = await notificationService.hasPremiumSubscription(pubkey);
+      const notificationCount = await notificationService.get24HourNotificationCount(pubkey);
       
       const limit = isPremium 
         ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || '50') 
@@ -174,10 +172,9 @@ class WebPushService {
    * Get user notification settings and filters
    * @param pubkey - User's public key
    * @returns User's notification settings
-   */
-  async getUserNotificationSettings(pubkey: string): Promise<NotificationSettings> {
+   */  async getUserNotificationSettings(pubkey: string): Promise<NotificationSettings> {
     try {
-      const settings = await tableStorage.getEntity(pubkey, "notification-settings");
+      const settings = await notificationService.getEntity(pubkey, "notification-settings");
       return settings as NotificationSettings || { enabled: true }; // Default settings if none exist
     } catch (error) {
       logger.error(`Error getting notification settings for user ${pubkey}: ${(error as Error).message}`);
@@ -190,10 +187,9 @@ class WebPushService {
    * @param pubkey - User's public key
    * @param notification - Notification data
    * @returns True if notification passes filters
-   */
-  async passesCustomFilters(pubkey: string, notification: NotificationPayload): Promise<boolean> {
+   */  async passesCustomFilters(pubkey: string, notification: NotificationPayload): Promise<boolean> {
     try {
-      const isPremium = await tableStorage.hasPremiumSubscription(pubkey);
+      const isPremium = await notificationService.hasPremiumSubscription(pubkey);
       
       // If not premium, they can't have custom filters
       if (!isPremium) {

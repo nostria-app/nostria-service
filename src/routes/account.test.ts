@@ -2,7 +2,7 @@ import request from 'supertest';
 import { Response } from 'supertest';
 
 // Mock some other routes before importing app so that their initialization code is skipped
-jest.mock('../database/BaseRepository')
+// Mock removed - BaseRepository no longer exists
 jest.mock('../routes/subscription', () => {
   const router = require('express').Router();
   return router;
@@ -14,13 +14,13 @@ jest.mock('../routes/notification', () => {
 });
 
 // Now import the app after mocks are set up
-jest.mock('../database/accountRepository');
-jest.mock('../database/paymentRepository');
+jest.mock('../database/accountRepositoryCosmosDb');
+jest.mock('../database/paymentRepositoryCosmosDb');
 
 import app from '../index';
 import { generateNIP98, testAccount, testPayment } from '../helpers/testHelper';
-import paymentRepository from '../database/paymentRepository';
-import accountRepository from '../database/accountRepository';
+import paymentRepository from '../database/paymentRepositoryCosmosDb';
+import accountRepository from '../database/accountRepositoryCosmosDb';
 import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
 import config from '../config';
 
@@ -37,13 +37,13 @@ describe('Account API', () => {
 
   describe('GET /api/account/:pubkeyOrUsername', () => {
     test('should check if pubkey is not available', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(account)
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(account)
 
       const response = await request(app)
         .get(`/api/account/${account.pubkey}`)
         .expect(200);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey)
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey)
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
@@ -54,7 +54,7 @@ describe('Account API', () => {
     });
 
     test('should check if pubkey is available', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null)
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null)
 
       const response = await request(app)
         .get(`/api/account/${account.pubkey}`)
@@ -65,7 +65,7 @@ describe('Account API', () => {
         message: 'User not found'
       });
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
     });
 
     test('should return existing user by username', async () => {
@@ -96,12 +96,12 @@ describe('Account API', () => {
         success: false,
         message: 'User not found'
       });
-      expect(mockAccountRepository.getByPubKey).not.toHaveBeenCalled()
+      expect(mockAccountRepository.getByPubkey).not.toHaveBeenCalled()
       expect(mockAccountRepository.getByUsername).toHaveBeenCalledWith(account.username);
     });
 
     test('should apply rate limits', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValue(account)
+      mockAccountRepository.getByPubkey.mockResolvedValue(account)
 
       // Make multiple requests quickly
       const requests = Array.from({ length: 30 }, () =>
@@ -119,7 +119,7 @@ describe('Account API', () => {
 
   describe('POST /api/account', () => {
     test('should create new free account successfully', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
 
       const response = await request(app)
         .post('/api/account')
@@ -129,7 +129,7 @@ describe('Account API', () => {
         })
         .expect(201);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
         tier: 'free',
@@ -150,7 +150,7 @@ describe('Account API', () => {
     });
 
     test('should create new premium account successfully', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
       const mockPayment = testPayment({
         pubkey: account.pubkey,
         isPaid: true,
@@ -167,7 +167,7 @@ describe('Account API', () => {
         })
         .expect(201);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
         tier: mockPayment.tier,
@@ -203,7 +203,7 @@ describe('Account API', () => {
     });
 
     test('should return 409 if account already exists', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(account);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(account);
 
       await request(app)
         .post('/api/account')
@@ -213,12 +213,12 @@ describe('Account API', () => {
         })
         .expect(409);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).not.toHaveBeenCalled();
     });
 
     test('should handle server errors gracefully', async () => {
-      mockAccountRepository.getByPubKey.mockRejectedValueOnce(new Error('Database error 1'));
+      mockAccountRepository.getByPubkey.mockRejectedValueOnce(new Error('Database error 1'));
 
       await request(app)
         .post('/api/account')
@@ -230,7 +230,7 @@ describe('Account API', () => {
     });
 
     test('should apply rate limits', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
       mockAccountRepository.create.mockResolvedValueOnce(account);
 
       // Make multiple requests quickly
@@ -261,7 +261,7 @@ describe('Account API', () => {
     test('should return account info when authenticated', async () => {
       const testAuth = await generateNIP98();
       account = testAccount({ pubkey: testAuth.npub })
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(account);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(account);
 
       const response = await request(app)
         .get('/api/account')
@@ -276,7 +276,7 @@ describe('Account API', () => {
         signupDate: account.createdAt.toISOString(),
       });
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
     });
 
     test('should return 404 if account not found', async () => {
@@ -285,19 +285,19 @@ describe('Account API', () => {
       account = testAccount({ pubkey: testAuth.npub })
 
       // make service return null for a pubkey
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
 
       await request(app)
         .get('/api/account')
         .set('Authorization', `Nostr ${testAuth.token}`)
         .expect(404);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalled();
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalled();
     });
 
     test('should handle server errors gracefully', async () => {
       const testAuth = await generateNIP98();
-      mockAccountRepository.getByPubKey.mockRejectedValueOnce(new Error('Database error 2'));
+      mockAccountRepository.getByPubkey.mockRejectedValueOnce(new Error('Database error 2'));
 
       await request(app)
         .get('/api/account')
@@ -328,7 +328,7 @@ describe('Account API', () => {
         updatedAt: new Date()
       };
 
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(currentAccount);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
       mockAccountRepository.update.mockResolvedValueOnce(updatedAccount);
 
       const response = await request(app)
@@ -345,7 +345,7 @@ describe('Account API', () => {
         signupDate: updatedAccount.createdAt.toISOString(),
       });
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
       expect(mockAccountRepository.update).toHaveBeenCalledWith({
         ...currentAccount,
         username: 'bob',
@@ -355,7 +355,7 @@ describe('Account API', () => {
     test('should now allow to set username which is already taken', async () => {
       const currentAccount = testAccount({ pubkey: testAuth.npub });
       mockAccountRepository.update.mockRejectedValueOnce({ message: 'Username is already taken' });
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(currentAccount);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
 
       const response = await request(app)
         .put('/api/account')
@@ -372,7 +372,7 @@ describe('Account API', () => {
         updatedAt: new Date()
       };
 
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(currentAccount);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
       mockAccountRepository.update.mockResolvedValueOnce(updatedAccount);
 
       const response = await request(app)
@@ -389,12 +389,12 @@ describe('Account API', () => {
         signupDate: updatedAccount.createdAt.toISOString(),
       });
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
       expect(mockAccountRepository.update).toHaveBeenCalledWith(currentAccount);
     });
 
     test('should return 404 if account not found', async () => {
-      mockAccountRepository.getByPubKey.mockResolvedValueOnce(null);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
 
       await request(app)
         .put('/api/account')
@@ -402,12 +402,12 @@ describe('Account API', () => {
         .send({ username: 'bla' })
         .expect(404);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
       expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
 
     test('should handle server errors gracefully', async () => {
-      mockAccountRepository.getByPubKey.mockRejectedValueOnce(new Error('Database error 3'));
+      mockAccountRepository.getByPubkey.mockRejectedValueOnce(new Error('Database error 3'));
 
       await request(app)
         .put('/api/account')
@@ -415,7 +415,7 @@ describe('Account API', () => {
         .send({ username: 'bla' })
         .expect(500);
 
-      expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
       expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
   });

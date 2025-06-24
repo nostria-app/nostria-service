@@ -109,7 +109,7 @@ Add the following environment variables to your `.env` file:
 AZURE_COSMOSDB_CONNECTION_STRING=your_cosmosdb_connection_string_here
 # For managed identity (recommended for production)
 # AZURE_COSMOSDB_ENDPOINT=https://your-account.documents.azure.com:443/
-AZURE_COSMOSDB_DATABASE_NAME=nostria
+AZURE_COSMOSDB_DATABASE_NAME=NostriaDB
 AZURE_COSMOSDB_CONTAINER_NAME=Documents
 ```
 

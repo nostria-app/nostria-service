@@ -7,9 +7,9 @@ import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isValidNpub } from '../utils/nostr';
 import config from '../config';
 import { features } from '../config/features';
-import accountRepository from '../database/accountRepository';
+import accountRepository from '../database/accountRepositoryCosmosDb';
 import { Account } from '../models/account';
-import paymentRepository from '../database/paymentRepository';
+import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
 
@@ -384,7 +384,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     }
 
     // Check if user already exists
-    const existingAccount = await accountRepository.getByPubKey(pubkey);
+    const existingAccount = await accountRepository.getByPubkey(pubkey);
     if (existingAccount) {
       return res.status(409).json({ error: 'Account already exists' });
     }
@@ -416,9 +416,9 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
     const now = new Date();
 
-    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');
-
-    const account = {
+    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');    const account: Account = {
+      id: pubkey,
+      type: 'account',
       pubkey,
       username: canHaveUsername ? username : undefined,
       createdAt: now,
@@ -428,11 +428,11 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       expiresAt: expiresAt(subscription.billingCycle),
     };
     
-    await accountRepository.create(account);
+    const createdAccount = await accountRepository.create(account);
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
 
-    return res.status(201).json(toAccountDto(account));
+    return res.status(201).json(toAccountDto(createdAccount));
   } catch (error: any) {
     logger.error(`Error during signup: ${error.message}`);
     return res.status(500).json({ error: 'Failed to register user' });
@@ -491,7 +491,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
 
     let account: Account | null;
     if (isValidNpub(needle)) {
-      account = await accountRepository.getByPubKey(needle);
+      account = await accountRepository.getByPubkey(needle);
     } else {
       account = await accountRepository.getByUsername(needle);
     }
@@ -566,7 +566,7 @@ router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
 
-    const account = await accountRepository.getByPubKey(pubkey);
+    const account = await accountRepository.getByPubkey(pubkey);
     if (!account) {
       return res.status(404).json({ error: 'Profile not found' });
     }
@@ -642,7 +642,7 @@ router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountRe
     const { username } = req.body;
 
     // Get current account
-    const currentAccount = await accountRepository.getByPubKey(pubkey);
+    const currentAccount = await accountRepository.getByPubkey(pubkey);
     if (!currentAccount) {
       return res.status(404).json({ error: 'Account not found' });
     }

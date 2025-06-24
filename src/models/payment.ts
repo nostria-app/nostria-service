@@ -4,7 +4,8 @@ export const INVOICE_TTL = 15 * 60 * 1000; // 15 minutes
 
 export interface Payment {
   id: string;
-  type: 'ln',
+  type: 'payment'; // Document type for CosmosDB querying
+  paymentType: 'ln'; // Renamed from 'type' to avoid conflict with document type
 
   // Lightning type props
   lnHash: string;
