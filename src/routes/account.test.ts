@@ -36,24 +36,47 @@ describe('Account API', () => {
   });
 
   describe('GET /api/account/:pubkeyOrUsername', () => {
-    test('should check if pubkey is not available', async () => {
+    test('should return public profile data for account', async () => {
       mockAccountRepository.getByPubKey.mockResolvedValueOnce(account)
 
-      const response = await request(app)
-        .get(`/api/account/${account.pubkey}`)
-        .expect(200);
-
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      
+      expect(response.status).toEqual(200);
       expect(mockAccountRepository.getByPubKey).toHaveBeenCalledWith(account.pubkey)
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
-        tier: 'free',
+        tier: account.tier,
         isActive: true,
       });
     });
 
-    test('should check if pubkey is available', async () => {
+    test('should return proper tier', async () => {
+      mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+        tier: 'premium',
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("tier", 'premium');
+    });
+
+    test('should return isActive true if subscription is not expired', async () => {
+      mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+        expiresAt: new Date(Date.now() + 1000)
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("isActive", true);
+    });
+
+    test('should return isActive false if subscription expired', async () => {
+      mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+        expiresAt: new Date(Date.now() - 100)
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("isActive", false);
+    });
+
+    test('should return success false if user does not exist for the pubkey', async () => {
       mockAccountRepository.getByPubKey.mockResolvedValueOnce(null)
 
       const response = await request(app)
@@ -80,12 +103,12 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
         signupDate: account.createdAt.toISOString(),
-        tier: 'free',
+        tier: account.tier,
         isActive: true,
       });
     });
 
-    test('should handle when the user with username is not available', async () => {
+    test('should return success false if user does not exist for the username', async () => {
       mockAccountRepository.getByUsername.mockResolvedValueOnce(null)
 
       const response = await request(app)

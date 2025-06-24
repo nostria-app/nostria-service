@@ -511,8 +511,8 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
     const publicProfile: PublicAccountDto = {
       pubkey: account.pubkey,
       signupDate: account.createdAt,
-      tier: 'free',
-      isActive: true,
+      tier: account.tier,
+      isActive: !account.expiresAt || account.expiresAt > new Date(),
     };
 
     return res.status(200).json({
