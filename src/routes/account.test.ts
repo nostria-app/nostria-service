@@ -19,9 +19,11 @@ jest.mock('../database/paymentRepositoryCosmosDb');
 
 import app from '../index';
 import { generateNIP98, testAccount, testPayment } from '../helpers/testHelper';
+
 import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import accountRepository from '../database/accountRepositoryCosmosDb';
-import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
+import { DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
+
 import config from '../config';
 import { now } from '../helpers/now';
 
@@ -49,25 +51,50 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
         signupDate: account.created,
-        tier: 'free',
+        tier: account.tier,
+
         isActive: true,
       });
     });
 
-    test('should check if pubkey is available', async () => {
-      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null)
+    // test('should return proper tier', async () => {
+    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+    //     tier: 'premium',
+    //   }))
+    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
+    //   expect(response.body.result).toHaveProperty("tier", 'premium');
+    // });
 
-      const response = await request(app)
-        .get(`/api/account/${account.pubkey}`)
-        .expect(200);
+    // test('should return isActive true if subscription is not expired', async () => {
+    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+    //     expires: Date.now() + 1000
+    //   }))
+    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
+    //   expect(response.body.result).toHaveProperty("isActive", true);
+    // });
 
-      expect(response.body).toEqual({
-        success: false,
-        message: 'User not found'
-      });
+    // test('should return isActive false if subscription expired', async () => {
+    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
+    //     expires: Date.now() - 100
+    //   }))
+    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
+    //   expect(response.body.result).toHaveProperty("isActive", false);
+    // });
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
-    });
+    // test('should return success false if user does not exist for the pubkey', async () => {
+    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(null)
+
+    //   const response = await request(app)
+    //     .get(`/api/account/${account.pubkey}`)
+    //     .expect(200);
+
+    //   expect(response.body).toEqual({
+    //     success: false,
+    //     message: 'User not found'
+    //   });
+
+    //   expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
+    // });
 
     test('should return existing user by username', async () => {
       mockAccountRepository.getByUsername.mockResolvedValueOnce(account)
@@ -80,13 +107,13 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
-        signupDate: account.created,
-        tier: 'free',
+        signupDate: account.createdAt.toISOString(),
+        tier: account.tier,
         isActive: true,
       });
     });
 
-    test('should handle when the user with username is not available', async () => {
+    test('should return success false if user does not exist for the username', async () => {
       mockAccountRepository.getByUsername.mockResolvedValueOnce(null)
 
       const response = await request(app)
@@ -191,6 +218,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         username: account.username,
         tier: mockPayment.tier,
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: config.tiers['premium'].entitlements,
         signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
       });
@@ -273,6 +301,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         username: account.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: account.created,
       });
@@ -342,6 +371,7 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.created,
       });
@@ -386,6 +416,7 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.created,
       });

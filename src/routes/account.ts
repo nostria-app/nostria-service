@@ -101,6 +101,11 @@ interface PublicAccountDto {
  *           format: date-time
  *           nullable: true
  *           description: Last login date
+ *         expiresAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Subscription expiry date
  *         tier:
  *           $ref: '#/components/schemas/Tier'
  *         entitlements:
@@ -111,6 +116,7 @@ interface AccountDto {
   username?: string;
   signupDate: number;
   lastLoginDate?: number;
+  expires?: number;
   tier: Tier;
   entitlements: Entitlements;
 }
@@ -191,12 +197,15 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, username, created, tier, subscription, lastLoginDate }: Account): AccountDto => ({
+
+
+const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
   signupDate: created,
   lastLoginDate,
   tier,
+  expires,
   entitlements: subscription?.entitlements,
 });
 
@@ -520,8 +529,8 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
     const publicProfile: PublicAccountDto = {
       pubkey: account.pubkey,
       signupDate: account.created,
-      tier: 'free',
-      isActive: true,
+      tier: account.tier,
+      isActive: !account.expires || account.expires > now(),
     };
 
     return res.status(200).json({
