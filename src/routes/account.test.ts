@@ -21,7 +21,7 @@ import app from '../index';
 import { generateNIP98, testAccount, testPayment } from '../helpers/testHelper';
 import paymentRepository from '../database/paymentRepository';
 import accountRepository from '../database/accountRepository';
-import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
+import { DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import config from '../config';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
@@ -190,6 +190,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         username: account.username,
         tier: mockPayment.tier,
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: config.tiers['premium'].entitlements,
         signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
       });
@@ -272,6 +273,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         username: account.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: account.createdAt.toISOString(),
       });
@@ -341,6 +343,7 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.createdAt.toISOString(),
       });
@@ -385,6 +388,7 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
+        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.createdAt.toISOString(),
       });

@@ -101,6 +101,11 @@ interface PublicAccountDto {
  *           format: date-time
  *           nullable: true
  *           description: Last login date
+ *         expiresAt:
+ *           type: string
+ *           format: date-time
+ *           nullable: true
+ *           description: Subscription expiry date
  *         tier:
  *           $ref: '#/components/schemas/Tier'
  *         entitlements:
@@ -111,6 +116,7 @@ interface AccountDto {
   username?: string;
   signupDate: Date;
   lastLoginDate?: Date;
+  expiresAt?: Date;
   tier: Tier;
   entitlements: Entitlements;
 }
@@ -191,12 +197,13 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, username, createdAt, tier, subscription, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, username, createdAt, tier, expiresAt, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
   signupDate: createdAt,
   lastLoginDate,
   tier,
+  expiresAt,
   entitlements: subscription?.entitlements,
 });
 
