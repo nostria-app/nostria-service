@@ -12,6 +12,7 @@ import {
   CreateBackupJobRequest,
   BackupJobResponse 
 } from '../models/backupJob';
+import { now } from '../helpers/now';
 
 interface ErrorBodyWithMessage extends ErrorBody {
   message: string;
@@ -79,7 +80,7 @@ interface ErrorBodyWithMessage extends ErrorBody {
  *           type: string
  *           nullable: true
  *           description: Download URL for completed backup (expires after some time)
- *         expiresAt:
+ *         expires:
  *           type: string
  *           format: date-time
  *           nullable: true
@@ -158,7 +159,7 @@ const router = express.Router();
  */
 router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response<BackupJobResponse | ErrorBodyWithMessage>) => {
   try {
-    const { backupType, scheduledAt, metadata } = req.body as CreateBackupJobRequest;
+    const { backupType, scheduled, metadata } = req.body as CreateBackupJobRequest;
     const pubkey = req.authenticatedPubkey!;
 
     // Validate backup type
@@ -170,10 +171,10 @@ router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98Authenticat
     }
 
     // Validate scheduledAt if provided
-    let parsedScheduledAt: Date | undefined;
-    if (scheduledAt) {
-      parsedScheduledAt = new Date(scheduledAt);
-      if (isNaN(parsedScheduledAt.getTime())) {
+    let parsedScheduled: Date | undefined;
+    if (scheduled) {
+      parsedScheduled = new Date(scheduled);
+      if (isNaN(parsedScheduled.getTime())) {
         return res.status(400).json({
           error: 'Invalid scheduled date',
           message: 'scheduledAt must be a valid ISO 8601 date string'
@@ -183,7 +184,7 @@ router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98Authenticat
       // Don't allow scheduling too far in the future (30 days max)
       const maxFutureDate = new Date();
       maxFutureDate.setDate(maxFutureDate.getDate() + 30);
-      if (parsedScheduledAt > maxFutureDate) {
+      if (parsedScheduled > maxFutureDate) {
         return res.status(400).json({
           error: 'Invalid scheduled date',
           message: 'Cannot schedule backup more than 30 days in the future'
@@ -196,8 +197,8 @@ router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98Authenticat
       pubkey,
       status: BackupJobStatus.PENDING,
       backupType,
-      requestedAt: new Date(),
-      scheduledAt: parsedScheduledAt,
+      requested: now(),
+      scheduled: parsedScheduled?.getTime(),
       metadata
     };
 
@@ -208,13 +209,13 @@ router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98Authenticat
       id: createdJob.id,
       status: createdJob.status,
       backupType: createdJob.backupType,
-      requestedAt: createdJob.requestedAt,
-      scheduledAt: createdJob.scheduledAt,
-      startedAt: createdJob.startedAt,
-      completedAt: createdJob.completedAt,
+      requested: createdJob.requested,
+      scheduled: createdJob.scheduled,
+      started: createdJob.started,
+      completed: createdJob.completed,
       errorMessage: createdJob.errorMessage,
       resultUrl: createdJob.resultUrl,
-      expiresAt: createdJob.expiresAt,
+      expires: createdJob.expires,
       metadata: createdJob.metadata
     };
 
@@ -303,13 +304,13 @@ router.get('/:jobId', backupQueryRateLimit, requireNIP98Auth, async (req: NIP98A
       id: backupJob.id,
       status: backupJob.status,
       backupType: backupJob.backupType,
-      requestedAt: backupJob.requestedAt,
-      scheduledAt: backupJob.scheduledAt,
-      startedAt: backupJob.startedAt,
-      completedAt: backupJob.completedAt,
+      requested: backupJob.requested,
+      scheduled: backupJob.scheduled,
+      started: backupJob.started,
+      completed: backupJob.completed,
       errorMessage: backupJob.errorMessage,
       resultUrl: backupJob.resultUrl,
-      expiresAt: backupJob.expiresAt,
+      expires: backupJob.expires,
       metadata: backupJob.metadata
     };
 
@@ -388,13 +389,13 @@ router.get('/', backupQueryRateLimit, requireNIP98Auth, async (req: NIP98Authent
         id: job.id,
         status: job.status,
         backupType: job.backupType,
-        requestedAt: job.requestedAt,
-        scheduledAt: job.scheduledAt,
-        startedAt: job.startedAt,
-        completedAt: job.completedAt,
+        requested: job.requested,
+        scheduled: job.scheduled,
+        started: job.started,
+        completed: job.completed,
         errorMessage: job.errorMessage,
         resultUrl: job.resultUrl,
-        expiresAt: job.expiresAt,
+        expires: job.expires,
         metadata: job.metadata
       } as BackupJobResponse)),
       total: backupJobs.length

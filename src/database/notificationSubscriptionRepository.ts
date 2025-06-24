@@ -1,6 +1,7 @@
 import { NotificationSubscription } from "../models/notificationSubscription";
 import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
+import { now } from "../helpers/now";
 
 class NotificationSubscriptionRepository extends CosmosDbBaseRepository<NotificationSubscription> {
   constructor() {
@@ -10,7 +11,7 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
   async createSubscription(pubkey: string, subscription: any): Promise<NotificationSubscription> {
     try {
       const deviceKey = subscription.keys.p256dh;
-      const now = new Date();
+      const ts = now();
       
       const subscriptionEntity: NotificationSubscription = {
         id: `${pubkey}-${deviceKey}`, // Unique ID combining pubkey and device key
@@ -18,8 +19,8 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
         pubkey,
         subscription,
         deviceKey,
-        createdAt: now,
-        updatedAt: now
+        created: ts,
+        modified: ts
       };
       
       return await super.upsert(subscriptionEntity);

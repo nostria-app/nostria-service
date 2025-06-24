@@ -78,7 +78,7 @@ describe('Payment Routes', () => {
         id: 'test-uuid-id',
         status: 'pending',
         lnInvoice: 'lnbc1234567890',
-        expiresAt: mockInvoice.expiresAt.toISOString()
+        expires: mockInvoice.expires
       });
 
       expect(mockLightningService.getUsdBtcRate).toHaveBeenCalled();
@@ -94,9 +94,9 @@ describe('Payment Routes', () => {
         priceCents: 999,
         pubkey: mockInvoice.pubkey,
         isPaid: false,
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-        expiresAt: expect.any(Date),
+        created: expect.any(Number),
+        modified: expect.any(Number),
+        expires: expect.any(Number),
       });
     });
 
@@ -174,7 +174,7 @@ describe('Payment Routes', () => {
       const paidInvoice = {
         ...mockInvoice,
         isPaid: true,
-        paidAt: new Date('2025-06-18T15:16:45.325Z')
+        paid: 1750259805325 // 2025-06-18T15:16:45.325Z
       };
       mockPaymentRepository.get.mockResolvedValue(paidInvoice);
 
@@ -187,7 +187,7 @@ describe('Payment Routes', () => {
         id: mockInvoice.id,
         status: 'paid',
         lnInvoice: 'lnbc1234567890',
-        expiresAt: mockInvoice.expiresAt.toISOString()
+        expires: mockInvoice.expires
       });
     });
 
@@ -205,8 +205,8 @@ describe('Payment Routes', () => {
       expect(mockPaymentRepository.update).toHaveBeenCalledWith({
         ...mockInvoice,
         isPaid: true,
-        paidAt: expect.any(Date),
-        updatedAt: expect.any(Date),
+        paid: expect.any(Number),
+        updated: expect.any(Number),
       });
     });
 
@@ -222,14 +222,14 @@ describe('Payment Routes', () => {
         id: mockInvoice.id,
         status: 'pending',
         lnInvoice: 'lnbc1234567890',
-        expiresAt: mockInvoice.expiresAt.toISOString()
+        expires: mockInvoice.expires
       });
     });
 
     it('should return expired status when payment is expired', async () => {
       const expiredInvoice = {
         ...mockInvoice,
-        expiresAt: new Date(Date.now() - 15 * 60 * 1000) // 15 minutes ago
+        expires: Date.now() - 15 * 60 * 1000 // 15 minutes ago
       }
       mockPaymentRepository.get.mockResolvedValue(expiredInvoice);
       mockLightningService.checkPaymentStatus.mockResolvedValue(false);
@@ -242,7 +242,7 @@ describe('Payment Routes', () => {
         id: expiredInvoice.id,
         status: 'expired',
         lnInvoice: 'lnbc1234567890',
-        expiresAt: expiredInvoice.expiresAt.toISOString()
+        expires: expiredInvoice.expires
       });
     });
 

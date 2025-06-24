@@ -8,7 +8,7 @@ import { Tier, BillingCycle } from '../config/types';
 import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
-
+import { now } from '../helpers/now';
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
@@ -64,7 +64,7 @@ interface CreatePaymentRequest {
  *         - id
  *         - lnInvoice
  *         - status
- *         - expiresAt
+ *         - expires
  *       properties:
  *         id:
  *           type: string
@@ -76,7 +76,7 @@ interface CreatePaymentRequest {
  *           type: string
  *           enum: [pending, expired, paid]
  *           description: Payment status
- *         expiresAt:
+ *         expires:
  *           type: string
  *           format: date-time
  *           description: Expiry date
@@ -85,20 +85,20 @@ interface PaymentDto {
   id: string;
   lnInvoice: string;
   status: PaymentStatus;
-  expiresAt: Date;
+  expires: number;
 }
 
 type CreatePaymentRequestType = Request<{}, any, CreatePaymentRequest, any>;
 type CreatePaymentResponseType = Response<PaymentDto | ErrorBody>;
 
-type GetPaymentRequest = Request<{ paymentId: string }, any, any, any>;
+type GetPaymentRequest = Request<{ pubkey: string, paymentId: string }, any, any, any>;
 type GetPaymentResponse = Response<PaymentDto | ErrorBody>;
 
-const toPaymentDto = ({ id, lnInvoice, expiresAt }: Payment, status: PaymentStatus): PaymentDto => ({
+const toPaymentDto = ({ id, lnInvoice, expires }: Payment, status: PaymentStatus): PaymentDto => ({
   id,
   lnInvoice,
   status,
-  expiresAt,
+  expires,
 });
 
 /**
@@ -155,8 +155,8 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
     }
 
     // Validate pubkey format (basic npub check)
-    if (!pubkey.startsWith('npub')) {
-      return res.status(400).json({ error: 'Invalid pubkey format. Must be npub format' });
+    if (pubkey.startsWith('npub')) {
+      return res.status(400).json({ error: 'Invalid pubkey format. Must be hex format' });
     }
 
     // Get USD to BTC rate using LightningService
@@ -184,9 +184,13 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
     if (!invoice || !hash || !amountSat) {
       logger.error('Invalid invoice data received:', invoiceData);
       return res.status(500).json({ error: 'Invalid invoice data received' });
-    }    const now = new Date()    // Store invoice in database
+    }
+
+    const ts = now();
+
+    // Store invoice in database
     const payment = await paymentRepository.create({
-      id: invoiceId,
+      id: 'payment-' + invoiceId,
       type: 'payment',
       paymentType: 'ln',
       lnHash: hash,
@@ -197,9 +201,9 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       priceCents: price,
       pubkey,
       isPaid: false,
-      expiresAt: new Date(now.getTime() + INVOICE_TTL),
-      createdAt: now,
-      updatedAt: now,
+      expires: ts + INVOICE_TTL,
+      created: ts,
+      modified: ts,
     });
 
     logger.info(`Payment invoice created for ${pubkey}, tier: ${tierName}, amount: ${amountSat} sats`);
@@ -246,12 +250,15 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: GetPaymentResponse) => {
+router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: GetPaymentResponse) => {
   try {
-    const { paymentId } = req.params;
+    const { paymentId, pubkey } = req.params;
 
     // Find invoice by hash
-    const payment = await paymentRepository.get(paymentId);
+    const payment = await paymentRepository.get(paymentId, pubkey);
+
+    console.log('Payment record found:', paymentId, payment);
+
     if (!payment) {
       return res.status(400).json({ error: 'Payment Record not found' });
     }
@@ -261,22 +268,29 @@ router.get('/:paymentId', paymentRateLimit, async (req: GetPaymentRequest, res: 
       return res.json(toPaymentDto(payment, 'paid'));
     }
 
-    if (payment.expiresAt < new Date()) {
+    if (payment.expires < now()) {
       return res.json(toPaymentDto(payment, 'expired'));
     }
 
     // Check payment status with LightningService
     const paid = await lightningService.checkPaymentStatus(payment.lnHash);
 
+    console.log('Paid status:', paid);
+
     if (paid) {
       // Mark invoice as paid
-      const now = new Date();
-      await paymentRepository.update({
+      const ts = now();
+
+      const item = {
         ...payment,
         isPaid: true,
-        paidAt: now,
-        updatedAt: now,
-      })
+        paid: ts,
+        modified: ts,
+      };
+
+      console.log('Updating payment status to paid:', item);
+
+      await paymentRepository.update(item);
 
       logger.info(`Payment completed for ${payment.pubkey}, tier: ${payment.tier}, creating/updating account`);
 

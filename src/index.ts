@@ -17,6 +17,7 @@ import statusRoutes from './routes/status';
 import keyRoutes from './routes/key';
 import paymentRoutes from './routes/payment';
 import backupRoutes from './routes/backup';
+import settingsRoutes from './routes/settings';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -62,6 +63,7 @@ app.use('/api/key', keyRoutes);
 app.use('/api/account', account);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/backup', backupRoutes); // Backup management endpoints
+app.use('/api/settings', settingsRoutes); // User settings endpoints
 
 // Error handling middleware
 app.use(notFoundHandler);

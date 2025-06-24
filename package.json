@@ -8,6 +8,7 @@
     "start": "npm run build && node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "jest",
+    "e2e": "jest --config=jest.e2e.config.js",
     "test:watch": "jest --watch"
   },
   "keywords": [

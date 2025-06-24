@@ -4,13 +4,13 @@ export interface BackupJob {
   pubkey: string; // The user requesting the backup
   status: BackupJobStatus;
   backupType: BackupType;
-  requestedAt: Date;
-  scheduledAt?: Date;
-  startedAt?: Date;
-  completedAt?: Date;
+  requested: number;
+  scheduled?: number;
+  started?: number;
+  completed?: number;
   errorMessage?: string;
   resultUrl?: string; // URL where the backup can be downloaded (once completed)
-  expiresAt?: Date; // When the backup download link expires
+  expires?: number; // When the backup download link expires
   metadata?: {
     originalSize?: number;
     compressedSize?: number;
@@ -36,7 +36,7 @@ export enum BackupType {
 
 export interface CreateBackupJobRequest {
   backupType: BackupType;
-  scheduledAt?: Date; // Optional: schedule for later
+  scheduled?: number; // Optional: schedule for later
   metadata?: {
     description?: string;
     [key: string]: any;
@@ -47,12 +47,12 @@ export interface BackupJobResponse {
   id: string;
   status: BackupJobStatus;
   backupType: BackupType;
-  requestedAt: Date;
-  scheduledAt?: Date;
-  startedAt?: Date;
-  completedAt?: Date;
+  requested: number;
+  scheduled?: number;
+  started?: number;
+  completed?: number;
   errorMessage?: string;
   resultUrl?: string;
-  expiresAt?: Date;
+  expires?: number;
   metadata?: any;
 }

@@ -1,6 +1,7 @@
 import { Account } from "../models/account";
 import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
+import { now } from "../helpers/now";
 
 class AccountRepository extends CosmosDbBaseRepository<Account> {
   constructor() {
@@ -10,10 +11,9 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
     // Set the id to pubkey and use pubkey as partition key for efficient queries
     const accountEntity: Account = {
       ...account,
-      id: account.pubkey,
-      type: 'account'
+      type: this.entityType
     };
-    
+
     return await super.upsert(accountEntity);
   }
 
@@ -72,9 +72,9 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
         ...account,
         id: account.pubkey,
         type: 'account',
-        updatedAt: new Date()
+        modified: now()
       };
-      
+
       return await super.update(accountEntity);
     } catch (error) {
       logger.error('Failed to update account:', error);
@@ -86,7 +86,7 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
     try {
       const account = await this.getByPubkey(pubkey);
       if (account) {
-        account.lastLoginDate = new Date();
+        account.lastLoginDate = now();
         await this.update(account);
       }
     } catch (error) {
@@ -98,7 +98,7 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
   async getAllAccounts(limit: number = 100): Promise<Account[]> {
     try {
       const query = {
-        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.createdAt DESC',
+        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC',
         parameters: [
           { name: '@type', value: 'account' }
         ]
@@ -126,11 +126,11 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
       if (!account) {
         return false;
       }
-      
+
       // Check if user has premium or premium_plus tier and subscription is not expired
       const isPremiumTier = account.tier === 'premium' || account.tier === 'premium_plus';
-      const isNotExpired = !account.expiresAt || account.expiresAt > new Date();
-      
+      const isNotExpired = !account.expires || account.expires > now();
+
       return isPremiumTier && isNotExpired;
     } catch (error) {
       logger.error('Failed to check premium subscription:', error);

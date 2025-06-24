@@ -3,6 +3,147 @@ import notificationService from '../database/notificationService';
 import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     NotificationRequest:
+ *       type: object
+ *       properties:
+ *         pubkeys:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Array of user public keys to send notifications to. If empty, sends to all users.
+ *         template:
+ *           type: string
+ *           description: Template name for legacy template-based notifications
+ *         args:
+ *           type: object
+ *           additionalProperties: true
+ *           description: Template arguments for legacy template-based notifications
+ *         title:
+ *           type: string
+ *           description: Notification title (required for direct format)
+ *         body:
+ *           type: string
+ *           description: Notification body text (required for direct format)
+ *         icon:
+ *           type: string
+ *           description: Notification icon URL (optional, defaults to Nostria icon)
+ *         url:
+ *           type: string
+ *           description: URL to open when notification is clicked
+ *     NotificationResult:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               pubkey:
+ *                 type: string
+ *               successCount:
+ *                 type: integer
+ *               failCount:
+ *                 type: integer
+ *           description: Successfully sent notifications
+ *         failed:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               pubkey:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *               deviceCount:
+ *                 type: integer
+ *           description: Failed notifications with reasons
+ *         filtered:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               pubkey:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *           description: Notifications filtered by user settings
+ *         limited:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               pubkey:
+ *                 type: string
+ *               reason:
+ *                 type: string
+ *           description: Notifications blocked by rate limits
+ *         summary:
+ *           type: object
+ *           properties:
+ *             totalTargeted:
+ *               type: integer
+ *               description: Total number of users targeted
+ *             successful:
+ *               type: integer
+ *               description: Number of successful notifications
+ *             failed:
+ *               type: integer
+ *               description: Number of failed notifications
+ *             filtered:
+ *               type: integer
+ *               description: Number of filtered notifications
+ *             limited:
+ *               type: integer
+ *               description: Number of rate-limited notifications
+ *     NotificationStatus:
+ *       type: object
+ *       properties:
+ *         pubkey:
+ *           type: string
+ *           description: User's public key
+ *         hasSubscription:
+ *           type: boolean
+ *           description: Whether user has active push subscriptions
+ *         deviceCount:
+ *           type: integer
+ *           description: Number of registered devices
+ *         isPremium:
+ *           type: boolean
+ *           description: Whether user has premium subscription
+ *         settings:
+ *           type: object
+ *           properties:
+ *             enabled:
+ *               type: boolean
+ *               description: Whether notifications are enabled
+ *           description: User notification settings
+ *         notifications:
+ *           type: object
+ *           properties:
+ *             count24h:
+ *               type: integer
+ *               description: Number of notifications sent in last 24 hours
+ *             dailyLimit:
+ *               type: integer
+ *               description: Daily notification limit for user's tier
+ *             remaining:
+ *               type: integer
+ *               description: Remaining notifications for today
+ *   securitySchemes:
+ *     ApiKeyAuth:
+ *       type: apiKey
+ *       in: header
+ *       name: X-API-Key
+ *       description: API key for server-to-server notification sending
+ * tags:
+ *   - name: Notifications
+ *     description: Push notification management and delivery
+ */
+
 const router = express.Router();
 
 interface NotificationRequest {
@@ -50,9 +191,74 @@ interface WebPushPayload {
 }
 
 /**
- * Send notification to users
- * @route POST /api/notification/send
- * Protected by API key
+ * @openapi
+ * /notification/send:
+ *   post:
+ *     summary: Send notifications to users
+ *     description: |
+ *       Send push notifications to specified users or broadcast to all users. Supports both legacy template-based format
+ *       and new direct notification format. Handles rate limiting, user preferences, and device management automatically.
+ *     tags:
+ *       - Notifications
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/NotificationRequest'
+ *           examples:
+ *             directNotification:
+ *               summary: Direct notification format
+ *               value:
+ *                 title: "New Message"
+ *                 body: "You have received a new message"
+ *                 icon: "https://example.com/icon.png"
+ *                 url: "https://app.example.com/messages"
+ *                 pubkeys: ["pubkey1", "pubkey2"]
+ *             templateNotification:
+ *               summary: Template-based notification (legacy)
+ *               value:
+ *                 template: "message_received"
+ *                 args:
+ *                   username: "John"
+ *                   count: 3
+ *                 pubkeys: ["pubkey1"]
+ *             broadcastNotification:
+ *               summary: Broadcast to all users
+ *               value:
+ *                 title: "System Announcement"
+ *                 body: "The system will undergo maintenance tonight"
+ *     responses:
+ *       '200':
+ *         description: Notification processing completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/NotificationResult'
+ *       '400':
+ *         description: Invalid request parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Title and body are required"
+ *       '401':
+ *         description: Unauthorized - Invalid API key
+ *       '500':
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to process notifications"
  */
 router.post('/send', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -233,9 +439,66 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * Get notification status for a user
- * @route GET /api/notification/status/:pubkey
- * Protected by API key
+ * @openapi
+ * /notification/status/{pubkey}:
+ *   get:
+ *     summary: Get notification status for a user
+ *     description: |
+ *       Retrieve comprehensive notification status for a specific user including subscription status,
+ *       device count, premium status, notification settings, and usage statistics.
+ *     tags:
+ *       - Notifications
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - name: pubkey
+ *         in: path
+ *         required: true
+ *         description: User's public key (hexadecimal format)
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{64}$'
+ *           example: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+ *     responses:
+ *       '200':
+ *         description: User notification status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/NotificationStatus'
+ *             example:
+ *               pubkey: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+ *               hasSubscription: true
+ *               deviceCount: 2
+ *               isPremium: false
+ *               settings:
+ *                 enabled: true
+ *               notifications:
+ *                 count24h: 3
+ *                 dailyLimit: 5
+ *                 remaining: 2
+ *       '400':
+ *         description: Invalid pubkey parameter
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Invalid pubkey"
+ *       '401':
+ *         description: Unauthorized - Invalid API key
+ *       '500':
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to get notification status"
  */
 router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {

@@ -17,12 +17,12 @@ export interface Payment {
   billingCycle: BillingCycle;
   priceCents: number;
   isPaid: boolean;
-  paidAt?: Date;
-  expiresAt: Date;
+  paid?: number;
+  expires: number;
   
   // User
   pubkey: string;
   
-  updatedAt: Date;
-  createdAt: Date;
+  created: number;
+  modified: number;
 }

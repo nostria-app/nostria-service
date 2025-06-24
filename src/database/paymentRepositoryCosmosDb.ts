@@ -1,10 +1,11 @@
 import { Payment } from "../models/payment";
 import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
+import { now } from "../helpers/now";
 
 class PaymentRepository extends CosmosDbBaseRepository<Payment> {
   constructor() {
-    super('payment');
+    super('payment', true);
   }
   async create(payment: Payment): Promise<Payment> {
     // Use payment ID as partition key for efficient queries
@@ -12,25 +13,21 @@ class PaymentRepository extends CosmosDbBaseRepository<Payment> {
       ...payment,
       type: 'payment'
     };
-    
+
     return await super.create(paymentEntity);
   }
+
   async update(payment: Payment): Promise<Payment> {
     try {
-      const paymentEntity: Payment = {
-        ...payment,
-        type: 'payment'
-      };
-      
-      return await super.update(paymentEntity);
+      return await super.update(payment);
     } catch (error) {
       logger.error('Failed to update payment:', error);
       throw new Error(`Failed to update payment: ${(error as Error).message}`);
     }
   }
-  async get(id: string): Promise<Payment | null> {
+  async get(id: string, pubkey: string): Promise<Payment | null> {
     try {
-      return await this.getById(id);
+      return await this.getById(id, pubkey);
     } catch (error) {
       logger.error('Failed to get payment:', error);
       throw new Error(`Failed to get payment: ${(error as Error).message}`);
@@ -59,7 +56,7 @@ class PaymentRepository extends CosmosDbBaseRepository<Payment> {
     try {
       const now = new Date();
       const query = {
-        query: 'SELECT * FROM c WHERE c.type = @type AND c.expiresAt < @now AND c.isPaid = @isPaid',
+        query: 'SELECT * FROM c WHERE c.type = @type AND c.expires < @now AND c.isPaid = @isPaid',
         parameters: [
           { name: '@type', value: 'payment' },
           { name: '@now', value: now.toISOString() },
@@ -87,24 +84,24 @@ class PaymentRepository extends CosmosDbBaseRepository<Payment> {
     }
   }
 
-  async deletePayment(id: string): Promise<void> {
+  async deletePayment(id: string, pubkey: string): Promise<void> {
     try {
-      await super.delete(id, id);
+      await super.delete(id, pubkey);
     } catch (error) {
       logger.error('Failed to delete payment:', error);
       throw new Error(`Failed to delete payment: ${(error as Error).message}`);
     }
   }
 
-  async markAsPaid(id: string, paidAt: Date = new Date()): Promise<Payment> {
+  async markAsPaid(id: string, pubkey: string, paid: number = now()): Promise<Payment> {
     try {
-      const payment = await this.get(id);
+      const payment = await this.get(id, pubkey);
       if (!payment) {
         throw new Error('Payment not found');
       }
 
       payment.isPaid = true;
-      payment.paidAt = paidAt;
+      payment.paid = paid;
 
       return await this.update(payment);
     } catch (error) {

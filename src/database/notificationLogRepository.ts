@@ -1,6 +1,7 @@
 import { NotificationLog } from "../models/notificationLog";
 import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
+import { now } from "../helpers/now";
 
 class NotificationLogRepository extends CosmosDbBaseRepository<NotificationLog> {
   constructor() {
@@ -9,8 +10,8 @@ class NotificationLogRepository extends CosmosDbBaseRepository<NotificationLog> 
 
   async logNotification(pubkey: string, notificationData: any): Promise<NotificationLog> {
     try {
-      const now = new Date();
-      const id = `${pubkey}-${now.getTime()}-${Math.random().toString(36).substr(2, 9)}`;
+      const ts = now();
+      const id = `${pubkey}-${ts}-${Math.random().toString(36).substr(2, 9)}`;
       
       const logEntity: NotificationLog = {
         id,
@@ -20,8 +21,8 @@ class NotificationLogRepository extends CosmosDbBaseRepository<NotificationLog> 
         body: notificationData.body,
         content: notificationData.content,
         template: notificationData.template,
-        timestamp: notificationData.timestamp ? new Date(notificationData.timestamp) : now,
-        createdAt: now
+        modified: notificationData.timestamp ? notificationData.timestamp : ts,
+        created: ts
       };
       
       return await super.create(logEntity);

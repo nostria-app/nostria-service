@@ -4,6 +4,106 @@ import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     PushSubscription:
+ *       type: object
+ *       required:
+ *         - endpoint
+ *         - keys
+ *       properties:
+ *         endpoint:
+ *           type: string
+ *           description: Push service endpoint URL
+ *           example: "https://fcm.googleapis.com/fcm/send/..."
+ *         keys:
+ *           type: object
+ *           required:
+ *             - p256dh
+ *             - auth
+ *           properties:
+ *             p256dh:
+ *               type: string
+ *               description: P256DH key for encryption
+ *               example: "BNbSMUw..."
+ *             auth:
+ *               type: string
+ *               description: Auth secret for encryption
+ *               example: "tBHItJI5svbpez7KI4CCXg=="
+ *         userAgent:
+ *           type: string
+ *           description: Browser user agent string
+ *           example: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+ *     NotificationData:
+ *       type: object
+ *       properties:
+ *         title:
+ *           type: string
+ *           description: Notification title
+ *           example: "New Message"
+ *         body:
+ *           type: string
+ *           description: Notification body text
+ *           example: "You have received a new message"
+ *         icon:
+ *           type: string
+ *           description: Notification icon URL
+ *           example: "https://example.com/icon.png"
+ *         data:
+ *           type: object
+ *           description: Additional notification data
+ *           additionalProperties: true
+ *     DeviceInfo:
+ *       type: object
+ *       properties:
+ *         deviceId:
+ *           type: string
+ *           description: Unique device identifier
+ *         endpoint:
+ *           type: string
+ *           description: Push service endpoint URL
+ *         userAgent:
+ *           type: string
+ *           nullable: true
+ *           description: Browser user agent string
+ *         created:
+ *           type: string
+ *           format: date-time
+ *           description: Device registration timestamp
+ *         modified:
+ *           type: string
+ *           format: date-time
+ *           description: Last modification timestamp
+ *     DevicesResponse:
+ *       type: object
+ *       properties:
+ *         pubkey:
+ *           type: string
+ *           description: User's public key
+ *         deviceCount:
+ *           type: integer
+ *           description: Number of registered devices
+ *         devices:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/DeviceInfo'
+ *           description: List of user's devices
+ *     NotificationSettings:
+ *       type: object
+ *       description: User notification preferences and filters
+ *       additionalProperties: true
+ *   securitySchemes:
+ *     NIP98Auth:
+ *       type: http
+ *       scheme: bearer
+ *       description: NIP-98 authentication using Nostr events
+ * tags:
+ *   - name: Subscriptions
+ *     description: Web Push subscription management and device registration
+ */
+
 const router = express.Router();
 
 interface PushSubscription {
@@ -30,7 +130,55 @@ interface DeviceInfo {
   modified?: string;
 }
 
-/** Forwards the incoming notification to all instances for this user. Used for testing or syncing data across devices. */
+/**
+ * @openapi
+ * /subscription/send/{pubkey}:
+ *   post:
+ *     summary: Send test notification to user's devices
+ *     description: |
+ *       Send a test notification to all registered devices for a specific user.
+ *       Primarily used for testing push notification functionality and syncing data across devices.
+ *       Requires NIP-98 authentication.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - name: pubkey
+ *         in: path
+ *         required: true
+ *         description: User's public key (hexadecimal format)
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{64}$'
+ *           example: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/NotificationData'
+ *           example:
+ *             title: "Test Notification"
+ *             body: "This is a test notification"
+ *             icon: "https://nostria.app/icons/icon-128x128.png"
+ *     responses:
+ *       '200':
+ *         description: Notification sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 success:
+ *                   type: boolean
+ *       '401':
+ *         description: Unauthorized - Invalid NIP-98 token
+ *       '500':
+ *         description: Failed to send notification
+ */
 router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> => {
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
@@ -85,8 +233,57 @@ router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> 
 });
 
 /**
- * Save Web Push subscription for a user
- * @route POST /api/subscription/webpush/:pubkey
+ * @openapi
+ * /subscription/webpush/{pubkey}:
+ *   post:
+ *     summary: Register Web Push subscription for a user
+ *     description: |
+ *       Register a new Web Push subscription for a user's device. This enables the device
+ *       to receive push notifications. Automatically sends a welcome notification to test
+ *       the subscription. Requires NIP-98 authentication.
+ *     tags:
+ *       - Subscriptions
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - name: pubkey
+ *         in: path
+ *         required: true
+ *         description: User's public key (hexadecimal format)
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-fA-F0-9]{64}$'
+ *           example: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/PushSubscription'
+ *           example:
+ *             endpoint: "https://fcm.googleapis.com/fcm/send/xyz123"
+ *             keys:
+ *               p256dh: "BNbSMUw5svbpez7KI4CCXg=="
+ *               auth: "tBHItJI5svbpez7KI4CCXg=="
+ *             userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+ *     responses:
+ *       '201':
+ *         description: Subscription registered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       '400':
+ *         description: Invalid subscription data
+ *       '401':
+ *         description: Unauthorized - Invalid NIP-98 token
+ *       '500':
+ *         description: Failed to save subscription
  */
 router.post('/webpush/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {

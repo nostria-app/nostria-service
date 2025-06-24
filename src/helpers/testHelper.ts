@@ -2,6 +2,7 @@ import { finalizeEvent, generateSecretKey, getPublicKey, nip19, nip98 } from "no
 import { Account } from "../models/account";
 import { Payment } from "../models/payment";
 import { DEFAULT_SUBSCRIPTION } from "../models/accountSubscription";
+import { now } from "./now";
 
 export const generateNIP98 = async (method = 'GET') => {
   const keyPair = generateKeyPair()
@@ -29,14 +30,14 @@ export const testAccount = (partial?: Partial<Account>): Account => ({
   username: 'bla',
   tier: 'free',
   subscription: DEFAULT_SUBSCRIPTION,
-  expiresAt: new Date(Date.now() + 1000000),
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  expires: Date.now() + 1000000,
+  created: now(),
+  modified: now(),
   ...partial,
 });
 
 export const testPayment = (partial?: Partial<Payment>): Payment => {
-  const now = new Date();
+  const at = now();
 
   return {
     id: 'test-uuid-id',
@@ -50,9 +51,9 @@ export const testPayment = (partial?: Partial<Payment>): Payment => {
     priceCents: 999,
     pubkey: generateKeyPair().npub,
     isPaid: false,
-    createdAt: now,
-    updatedAt: now,
-    expiresAt: new Date(Date.now() + 5000),
+    created: at,
+    modified: at,
+    expires: at + 5000,
     ...partial,
   }
 };

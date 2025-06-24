@@ -8,6 +8,6 @@ export interface NotificationLog extends CosmosDbEntity {
   body?: string;
   content?: string;
   template?: string;
-  timestamp: Date;
-  createdAt: Date;
+  created: number;
+  modified: number;
 }

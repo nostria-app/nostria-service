@@ -1,6 +1,7 @@
 import { NotificationSettings } from "../models/notificationSettings";
 import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
+import { now } from "../helpers/now";
 
 class NotificationSettingsRepository extends CosmosDbBaseRepository<NotificationSettings> {
   constructor() {
@@ -9,8 +10,8 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
 
   async upsertSettings(pubkey: string, settingsData: any): Promise<NotificationSettings> {
     try {
-      const now = new Date();
-      const id = `${pubkey}-settings`;
+      const ts = now();
+      const id = `settings-${pubkey}`;
       
       // Try to get existing settings
       const existing = await this.getById(id, pubkey);
@@ -22,8 +23,8 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
         enabled: settingsData.enabled !== undefined ? settingsData.enabled : true,
         filters: settingsData.filters,
         settings: settingsData.settings,
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
+        created: existing?.created || ts,
+        updated: ts,
         ...settingsData // Spread any additional properties
       };
       
@@ -36,7 +37,7 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
 
   async getSettings(pubkey: string): Promise<NotificationSettings | null> {
     try {
-      const id = `${pubkey}-settings`;
+      const id = `settings-${pubkey}`;
       return await this.getById(id, pubkey);
     } catch (error) {
       logger.error('Failed to get notification settings:', error);
@@ -46,7 +47,7 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
 
   async deleteSettings(pubkey: string): Promise<void> {
     try {
-      const id = `${pubkey}-settings`;
+      const id = `settings-${pubkey}`;
       await this.delete(id, pubkey);
     } catch (error) {
       logger.error('Failed to delete notification settings:', error);

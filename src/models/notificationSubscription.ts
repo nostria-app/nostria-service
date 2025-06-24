@@ -15,6 +15,6 @@ export interface NotificationSubscription extends CosmosDbEntity {
   pubkey: string; // Partition key
   subscription: PushSubscription;
   deviceKey: string; // p256dh key used as unique identifier
-  createdAt: Date;
-  updatedAt: Date;
+  created: number;
+  modified: number;
 }

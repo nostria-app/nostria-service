@@ -3,7 +3,6 @@ import { nip19, nip98 } from 'nostr-tools';
 import logger from '../utils/logger';
 import { NIP98AuthenticatedRequest } from '../routes/types';
 
-
 const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
@@ -15,14 +14,15 @@ const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction
 
     const host = process.env.NODE_ENV === 'test' ? 'localhost:3000' : req.get('host');
     const url = `${req.protocol}://${host}${req.originalUrl}`;
-    
+
     let valid = false;
     let pubkey: string | null = null;
-    
+
     try {
       const token = authHeader.replace('Nostr ', '');
-      
+
       valid = await nip98.validateToken(token, url, req.method);
+
       // Extract pubkey from the token
       if (valid) {
         const unpackedEvent = await nip98.unpackEventFromToken(token)
@@ -41,7 +41,7 @@ const requireNIP98Auth = async (req: Request, res: Response, next?: NextFunction
 
     // Add the authenticated pubkey to the request object
     (req as NIP98AuthenticatedRequest).authenticatedPubkey = nip19.npubEncode(pubkey);
-    
+
     logger.debug(`NIP-98 authentication successful for pubkey: ${pubkey.substring(0, 16)}...`);
     next?.();
   } catch (error: any) {

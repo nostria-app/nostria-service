@@ -23,6 +23,7 @@ import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import accountRepository from '../database/accountRepositoryCosmosDb';
 import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
 import config from '../config';
+import { now } from '../helpers/now';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
@@ -47,7 +48,7 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
-        signupDate: account.createdAt.toISOString(),
+        signupDate: account.created,
         tier: 'free',
         isActive: true,
       });
@@ -79,7 +80,7 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
-        signupDate: account.createdAt.toISOString(),
+        signupDate: account.created,
         tier: 'free',
         isActive: true,
       });
@@ -134,9 +135,9 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         tier: 'free',
         subscription: DEFAULT_SUBSCRIPTION,
-        expiresAt: undefined,
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date), // test sets the same as createdAt
+        expires: undefined,
+        created: expect.any(Number),
+        updated: expect.any(Number), // test sets the same as createdAt
       });
 
       expect(mockPaymentRepository.get).not.toHaveBeenCalled();
@@ -154,7 +155,7 @@ describe('Account API', () => {
       const mockPayment = testPayment({
         pubkey: account.pubkey,
         isPaid: true,
-        paidAt: new Date(),
+        paid: now(),
       });
       mockPaymentRepository.get.mockResolvedValueOnce(mockPayment)
 
@@ -181,9 +182,9 @@ describe('Account API', () => {
           },
           entitlements: config.tiers['premium'].entitlements,
         },
-        expiresAt: expect.any(Date),
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
+        expires: expect.any(Number),
+        created: expect.any(Number),
+        updated: expect.any(Number),
       });
 
       expect(response.body).toEqual({
@@ -273,7 +274,7 @@ describe('Account API', () => {
         username: account.username,
         tier: 'free',
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
-        signupDate: account.createdAt.toISOString(),
+        signupDate: account.created,
       });
 
       expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
@@ -325,7 +326,7 @@ describe('Account API', () => {
       const updatedAccount = {
         ...currentAccount,
         username: 'bob',
-        updatedAt: new Date()
+        modified: now()
       };
 
       mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
@@ -342,7 +343,7 @@ describe('Account API', () => {
         username: updatedAccount.username,
         tier: 'free',
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
-        signupDate: updatedAccount.createdAt.toISOString(),
+        signupDate: updatedAccount.created,
       });
 
       expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
@@ -369,7 +370,7 @@ describe('Account API', () => {
       const currentAccount = testAccount({ pubkey: testAuth.npub });
       const updatedAccount = {
         ...currentAccount,
-        updatedAt: new Date()
+        modified: now()
       };
 
       mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
@@ -386,7 +387,7 @@ describe('Account API', () => {
         username: updatedAccount.username,
         tier: 'free',
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
-        signupDate: updatedAccount.createdAt.toISOString(),
+        signupDate: updatedAccount.created,
       });
 
       expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);

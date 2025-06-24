@@ -11,35 +11,35 @@ import { NotificationLog } from '../models/notificationLog';
  * Replaces the old tableStorage utility for CosmosDB
  */
 class NotificationService {
-  
+
   // Subscription methods
   async upsertEntity(pubkey: string, deviceKey: string, data: { subscription: string }): Promise<NotificationSubscription> {
     const subscription = JSON.parse(data.subscription);
     return await notificationSubscriptionRepository.createSubscription(pubkey, subscription);
   }
 
-  async getUserEntities(pubkey: string): Promise<Array<{ partitionKey: string; subscription: string; rowKey: string; timestamp?: string; created?: string }>> {
+  async getUserEntities(pubkey: string): Promise<Array<{ partitionKey: string; subscription: string; rowKey: string; timestamp?: number; created?: number }>> {
     const subscriptions = await notificationSubscriptionRepository.getUserSubscriptions(pubkey);
-    
+
     // Map to the old tableStorage format for compatibility
     return subscriptions.map(sub => ({
       partitionKey: sub.pubkey,
       subscription: JSON.stringify(sub.subscription),
       rowKey: sub.deviceKey,
-      timestamp: sub.updatedAt.toISOString(),
-      created: sub.createdAt.toISOString()
+      timestamp: sub.updated,
+      created: sub.created
     }));
   }
 
-  async getUserSubscriptions(pubkey: string): Promise<Array<{ subscription: string; rowKey: string; timestamp?: string; created?: string }>> {
+  async getUserSubscriptions(pubkey: string): Promise<Array<{ subscription: string; rowKey: string; timestamp?: number; created?: number }>> {
     const subscriptions = await notificationSubscriptionRepository.getUserSubscriptions(pubkey);
-    
+
     // Map to the old format for compatibility
     return subscriptions.map(sub => ({
       subscription: JSON.stringify(sub.subscription),
       rowKey: sub.deviceKey,
-      timestamp: sub.updatedAt.toISOString(),
-      created: sub.createdAt.toISOString()
+      timestamp: sub.updated,
+      created: sub.created
     }));
   }
 
@@ -49,7 +49,7 @@ class NotificationService {
       const settings = await notificationSettingsRepository.getSettings(pubkey);
       return settings ? { subscription: JSON.stringify(settings) } : null;
     }
-    
+
     const subscription = await notificationSubscriptionRepository.getSubscriptionByDeviceKey(pubkey, deviceKey);
     return subscription ? { subscription: JSON.stringify(subscription.subscription) } : null;
   }
@@ -72,13 +72,13 @@ class NotificationService {
     if (!settings) {
       return null;
     }
-    
+
     // Return in the old format for compatibility
-    const { id, type, createdAt, updatedAt, ...settingsData } = settings;
+    const { id, type, created, updated, ...settingsData } = settings;
     return {
       partitionKey: settings.pubkey,
       rowKey: 'notification-settings',
-      timestamp: settings.updatedAt.toISOString(),
+      timestamp: settings.updated,
       ...settingsData
     };
   }

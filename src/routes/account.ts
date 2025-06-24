@@ -12,7 +12,7 @@ import { Account } from '../models/account';
 import paymentRepository from '../database/paymentRepositoryCosmosDb';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
-
+import { now } from '../helpers/now';
 
 /**
  * @openapi
@@ -73,7 +73,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
  */
 interface PublicAccountDto {
   pubkey: string;
-  signupDate: Date;
+  signupDate: number;
   tier: string;
   isActive: boolean;
 }
@@ -109,8 +109,8 @@ interface PublicAccountDto {
 interface AccountDto {
   pubkey: string;
   username?: string;
-  signupDate: Date;
-  lastLoginDate?: Date;
+  signupDate: number;
+  lastLoginDate?: number;
   tier: Tier;
   entitlements: Entitlements;
 }
@@ -191,10 +191,10 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
  *           description: Error message
  */
 
-const toAccountDto = ({ pubkey, username, createdAt, tier, subscription, lastLoginDate }: Account): AccountDto => ({
+const toAccountDto = ({ pubkey, username, created, tier, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
-  signupDate: createdAt,
+  signupDate: created,
   lastLoginDate,
   tier,
   entitlements: subscription?.entitlements,
@@ -377,7 +377,11 @@ router.get('/tiers', (req: Request, res: Response) => {
  */
 router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccountResponse) => {
   try {
+    console.log('Received signup request:', req.body);
+
     const { pubkey, username, paymentId } = req.body;
+
+    console.log(`Received signup request for pubkey: ${pubkey}, username: ${username}, paymentId: ${paymentId}`);
 
     if (!pubkey) {
       return res.status(400).json({ error: 'Public key is required' });
@@ -385,6 +389,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
     // Check if user already exists
     const existingAccount = await accountRepository.getByPubkey(pubkey);
+
     if (existingAccount) {
       return res.status(409).json({ error: 'Account already exists' });
     }
@@ -392,8 +397,12 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     let subscription: AccountSubscription = DEFAULT_SUBSCRIPTION;
 
     if (paymentId) {
-      const payment = await paymentRepository.get(paymentId);
+      const payment = await paymentRepository.get(paymentId, pubkey);
+
+      console.log(`Payment found for ID: ${paymentId}`, payment);
+
       if (!payment) {
+        console.log(`No payment found for ID: ${paymentId}`);
         return res.status(400).json({ error: 'No such payment' });
       }
 
@@ -403,6 +412,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
       // Create or update user account with subscription
       const tierDetails = config.tiers[payment.tier];
+      
       subscription = {
         tier: payment.tier,
         billingCycle: payment.billingCycle,
@@ -412,21 +422,27 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
         },
         entitlements: tierDetails.entitlements,
       };
+
+      console.log(`Creating account with subscription:`, subscription);
     }
 
-    const now = new Date();
+    const ts = now();
 
-    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');    const account: Account = {
-      id: pubkey,
+    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');    
+    
+    const account: Account = {
+      id: `account-${pubkey}`,
       type: 'account',
       pubkey,
       username: canHaveUsername ? username : undefined,
-      createdAt: now,
-      updatedAt: now,
+      created: ts,
+      modified: ts,
       tier: subscription.tier,
       subscription,
-      expiresAt: expiresAt(subscription.billingCycle),
+      expires: expiresAt(subscription.billingCycle),
     };
+
+    console.log(`Creating account:`, account);
     
     const createdAccount = await accountRepository.create(account);
 
@@ -503,7 +519,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
     // Public profile information
     const publicProfile: PublicAccountDto = {
       pubkey: account.pubkey,
-      signupDate: account.createdAt,
+      signupDate: account.created,
       tier: 'free',
       isActive: true,
     };

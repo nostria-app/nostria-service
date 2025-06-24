@@ -1,9 +1,10 @@
 import config from "../config";
 import { Tier, BillingCycle, Price, Entitlements } from "../config/types";
+import { now } from "../helpers/now";
 
 export interface AccountSubscription {
   tier: Tier;
-  expiryDate?: Date;
+  expiryDate?: number;
   billingCycle?: BillingCycle;
   price?: Price;
   entitlements: Entitlements;
@@ -24,5 +25,5 @@ const billingCycleToDuration = (billingCycle: BillingCycle) => {
 
 export const expiresAt = (billingCycle?: BillingCycle) => {
   if (!billingCycle) return undefined;
-  return new Date(Date.now() + billingCycleToDuration(billingCycle));
+  return now() + billingCycleToDuration(billingCycle);
 };
