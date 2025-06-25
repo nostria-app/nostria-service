@@ -263,21 +263,23 @@ interface WebPushPayload {
 router.post('/send', async (req: Request, res: Response): Promise<void> => {
   try {
     const { pubkeys, template, args, title, body, icon, url }: NotificationRequest = req.body;
-    
+
     // Support both template-based and direct notification formats
     let notificationPayload: NotificationPayload;
     let targetPubkeys = pubkeys;
-    
+
+    console.log(`Received notification request: ${JSON.stringify(req.body)}`);
+
     if (template) {
       // Legacy template-based format
       if (!template) {
         res.status(400).json({ error: 'Template is required when using template format' });
         return;
       }
-      
+
       // Process the notification content
       const content = webPush.processTemplate(template, args);
-      
+
       notificationPayload = {
         title: 'Nostria Notification',
         content,
@@ -290,7 +292,7 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
         res.status(400).json({ error: 'Title and body are required' });
         return;
       }
-      
+
       notificationPayload = {
         title,
         body,
@@ -319,33 +321,39 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
       filtered: [],
       limited: []
     };
-    
+
     for (const pubkey of targetPubkeys) {
-      try {        // Get all subscriptions for this user
+      try {
+        // Get all subscriptions for this user
         const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
-        
+
+        console.log(`Processing notification for user ${pubkey}, found ${subscriptionEntities.length} devices`);
+
         if (!subscriptionEntities.length) {
           results.failed.push({ pubkey, reason: 'No subscriptions found' });
           continue;
         }
-        
+
         // Check if user can receive more notifications (tier limits)
         const canReceive = await webPush.canReceiveNotification(pubkey);
+
         if (!canReceive) {
           results.limited.push({ pubkey, reason: 'Daily notification limit reached' });
           continue;
         }
-        
+
         // Create the Web Push notification payload
         let webPushPayload: WebPushPayload;
+
         if (template) {
           // Legacy template format - keep existing behavior
           const passesFilters = await webPush.passesCustomFilters(pubkey, notificationPayload);
+          
           if (!passesFilters) {
             results.filtered.push({ pubkey, reason: 'Filtered by user settings' });
             continue;
           }
-          
+
           // Use legacy signing if available
           webPushPayload = notificationPayload as WebPushPayload;
         } else {
@@ -370,16 +378,16 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
 
         let deviceSuccessCount = 0;
         let deviceFailCount = 0;
-        
+
         // Send notification to all user's devices
         for (const subscriptionEntity of subscriptionEntities) {
           try {
             // Parse subscription from string
             const subscription = JSON.parse(subscriptionEntity.subscription);
-            
+
             // Send Web Push notification
             const pushResult = await webPush.sendNotification(subscription, webPushPayload);
-            
+
             if (pushResult && pushResult.error === 'expired_subscription') {
               logger.warn(`Expired subscription for user ${pubkey}, device key: ${subscriptionEntity.rowKey.substring(0, 16)}...`);
               deviceFailCount++;
@@ -392,20 +400,20 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
             deviceFailCount++;
           }
         }
-        
+
         // Log the notification to file and database
         await webPush.logNotificationToFile(pubkey, notificationPayload);
-        
+
         if (deviceSuccessCount > 0) {
-          results.success.push({ 
-            pubkey, 
+          results.success.push({
+            pubkey,
             successCount: deviceSuccessCount,
             failCount: deviceFailCount
           });
         } else {
-          results.failed.push({ 
-            pubkey, 
-            reason: 'All device notifications failed', 
+          results.failed.push({
+            pubkey,
+            reason: 'All device notifications failed',
             deviceCount: deviceFailCount
           });
         }
@@ -421,7 +429,7 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
       `failed for ${results.failed.length}, ` +
       `filtered for ${results.filtered.length}, ` +
       `limited for ${results.limited.length}`);
-    
+
     res.status(200).json({
       ...results,
       summary: {
@@ -503,7 +511,7 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
 router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void> => {
   try {
     const { pubkey } = req.params;
-    
+
     if (!pubkey) {
       res.status(400).json({ error: 'Invalid pubkey' });
       return;
@@ -511,21 +519,21 @@ router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void>
     const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
     const hasSubscription = subscriptionEntities.length > 0;
     const deviceCount = subscriptionEntities.length;
-    
+
     // Check premium status
     const isPremium = await notificationService.hasPremiumSubscription(pubkey);
-      
+
     // Get notification settings from CosmosDB
     const settings = await notificationService.getNotificationSettings(pubkey);
-    
+
     // Get 24-hour notification count
     const notificationCount = await notificationService.get24HourNotificationCount(pubkey);
-    
+
     // Get daily limits based on tier
     const dailyLimit = isPremium
       ? parseInt(process.env.PREMIUM_TIER_DAILY_LIMIT || '50')
       : parseInt(process.env.FREE_TIER_DAILY_LIMIT || '5');
-      
+
     const status = {
       pubkey,
       hasSubscription,
@@ -538,7 +546,7 @@ router.get('/status/:pubkey', async (req: Request, res: Response): Promise<void>
         remaining: Math.max(0, dailyLimit - notificationCount)
       }
     };
-    
+
     res.status(200).json(status);
   } catch (error) {
     logger.error(`Error getting notification status: ${(error as Error).message}`);

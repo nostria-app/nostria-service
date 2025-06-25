@@ -197,9 +197,13 @@ interface DeviceInfo {
 router.post('/send/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
+  console.log('Sending notification to pubkey:', url);
+
   // Don't get pubkey from route, but from authenticated user.
   const { pubkey } = req.params;
   const pubKeyAuth = req.authenticatedPubkey;
+
+  console.log('Sending notification to pubKeyAuth:', pubKeyAuth);
 
   if (pubkey !== pubKeyAuth) {
     res.status(400).json({ error: 'Pubkey mismatch' });
@@ -209,6 +213,8 @@ router.post('/send/:pubkey', authUser, async (req: SubscriptionRequest, res: Res
   const notification: NotificationData = req.body;
 
   const records = await notificationService.getUserEntities(pubkey);
+
+  console.log(`Found ${records.length} devices for user ${pubkey}`);
 
   for (const record of records) {
     const sub = JSON.parse(record.subscription);
@@ -228,7 +234,11 @@ router.post('/send/:pubkey', authUser, async (req: SubscriptionRequest, res: Res
       }
     };
 
+    console.log('Payload for device:', record.partitionKey, payload);
+
     const notificationResult = await webPush.sendNotification(sub, payload);
+
+    console.log(`Notification sent to ${record.partitionKey}:`, notificationResult);
 
     if (notificationResult.statusCode !== 201) {
       logger.error(`Failed to send notification to ${record.partitionKey}: ${notificationResult.statusCode}`);
