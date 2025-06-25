@@ -273,7 +273,11 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
     }
 
     // Check payment status with LightningService
-    const paid = await lightningService.checkPaymentStatus(payment.lnHash);
+    let paid = await lightningService.checkPaymentStatus(payment.lnHash);
+
+    if (config.env === 'development' && process.env.DEV_AUTO_PAYMENT === 'true') {
+      paid = paid || now() - payment.created > 10000;
+    }
 
     console.log('Paid status:', paid);
 

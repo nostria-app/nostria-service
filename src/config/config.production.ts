@@ -21,6 +21,7 @@ const PremiumPlusFeatures: Feature[] = [
 ];
 
 const config: Config = {
+  env: 'production',
   tiers: {
     free: {
       tier: 'free',

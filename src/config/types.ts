@@ -27,5 +27,6 @@ export interface TierDetails {
 };
 
 export type Config = {
-  tiers: Record<Tier, TierDetails>
+  env: 'production' | 'development';
+  tiers: Record<Tier, TierDetails>;
 }
