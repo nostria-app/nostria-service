@@ -1,6 +1,5 @@
 // Test setup file to configure environment variables for testing
 process.env.NODE_ENV = 'test';
-process.env.AZURE_STORAGE_CONNECTION_STRING = 'DefaultEndpointsProtocol=https;AccountName=test;AccountKey=test;EndpointSuffix=core.windows.net';
 process.env.AZURE_COSMOSDB_CONNECTION_STRING = 'AccountEndpoint=https://test.documents.azure.com:443/;AccountKey=test;';
 process.env.AZURE_COSMOSDB_DATABASE_NAME = 'NostriaDB';
 process.env.AZURE_COSMOSDB_CONTAINER_NAME = 'Documents';
