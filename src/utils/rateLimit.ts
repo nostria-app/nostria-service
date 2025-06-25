@@ -26,6 +26,10 @@ export const createRateLimit = (
         error: message,
         retryAfter: Math.ceil(windowMs / 1000)
       });
+    },
+    keyGenerator: (req) => {
+      const ip = req.ip || req.connection.remoteAddress || '';
+      return ip.split(':').slice(-1)[0]; // strips port if present
     }
   });
 };

@@ -36,7 +36,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 // TODO: figure out correct number of proxies
 // see: https://express-rate-limit.mintlify.app/guides/troubleshooting-proxy-issues
-app.set('trust proxy', 1); 
+app.set('trust proxy', true);
 
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false })); // Secure HTTP headers
