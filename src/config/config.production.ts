@@ -40,11 +40,11 @@ const config: Config = {
           currency: 'USD',
         },
         quarterly: {
-          priceCents: 2500,
+          priceCents: 3000,
           currency: 'USD',
         },
         yearly: {
-          priceCents: 9000,
+          priceCents: 9600,
           currency: 'USD',
         },
       },
@@ -58,15 +58,15 @@ const config: Config = {
       name: 'Premium+',
       pricing: {
         monthly: {
-          priceCents: 2000,
+          priceCents: 2500,
           currency: 'USD',
         },
         quarterly: {
-          priceCents: 5000,
+          priceCents: 7500,
           currency: 'USD',
         },
         yearly: {
-          priceCents: 18000,
+          priceCents: 24000,
           currency: 'USD',
         },
       },
