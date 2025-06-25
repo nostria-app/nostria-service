@@ -4,12 +4,12 @@ import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
-import { isValidNpub } from '../utils/nostr';
+import { isPotentiallyPubkey, isValidNpub } from '../utils/nostr';
 import config from '../config';
 import { features } from '../config/features';
-import accountRepository from '../database/accountRepositoryCosmosDb';
+import accountRepository from '../database/accountRepository';
 import { Account } from '../models/account';
-import paymentRepository from '../database/paymentRepositoryCosmosDb';
+import paymentRepository from '../database/paymentRepository';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
@@ -479,7 +479,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
  *         required: true
  *         schema:
  *           type: string
- *         description: User's public key in npub format or a username
+ *         description: User's public key in pubkey format or a username
  *     responses:
  *       '200':
  *         description: Public account information retrieved successfully
@@ -515,7 +515,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
     }
 
     let account: Account | null;
-    if (isValidNpub(needle)) {
+    if (isPotentiallyPubkey(needle)) {
       account = await accountRepository.getByPubkey(needle);
     } else {
       account = await accountRepository.getByUsername(needle);
@@ -590,6 +590,8 @@ router.get('/', authUser, async (req: GetAccountRequest, res: GetAccountResponse
   try {
     const pubkey = req.authenticatedPubkey;
     assert(pubkey, "Pubkey should be present for authenticated user");
+
+    console.log(`Getting account for authenticated user: ${pubkey}`);
 
     const account = await accountRepository.getByPubkey(pubkey);
     if (!account) {

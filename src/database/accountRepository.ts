@@ -7,6 +7,7 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
   constructor() {
     super('account');
   }
+
   async create(account: Account): Promise<Account> {
     // Set the id to pubkey and use pubkey as partition key for efficient queries
     const accountEntity: Account = {
@@ -41,7 +42,8 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
 
   async getByPubkey(pubkey: string): Promise<Account | null> {
     try {
-      return await this.getById(pubkey);
+      const id = `account-${pubkey}`;
+      return await this.getById(id, pubkey);
     } catch (error) {
       logger.error('Failed to get account by pubkey:', error);
       throw new Error(`Failed to get account: ${(error as Error).message}`);
@@ -65,12 +67,15 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
       throw new Error(`Failed to get account: ${(error as Error).message}`);
     }
   }
+
   async update(account: Account): Promise<Account> {
     try {
+      const id = `account-${account.pubkey}`;
+
       // Ensure the account has the correct structure for CosmosDB
       const accountEntity: Account = {
         ...account,
-        id: account.pubkey,
+        id: id,
         type: 'account',
         modified: now()
       };

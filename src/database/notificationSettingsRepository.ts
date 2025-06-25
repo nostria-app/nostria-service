@@ -11,11 +11,11 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
   async upsertSettings(pubkey: string, settingsData: any): Promise<NotificationSettings> {
     try {
       const ts = now();
-      const id = `settings-${pubkey}`;
-      
+      const id = `${this.entityType}-${pubkey}`;
+
       // Try to get existing settings
       const existing = await this.getById(id, pubkey);
-      
+
       const settingsEntity: NotificationSettings = {
         id,
         type: 'notification-settings',
@@ -27,7 +27,7 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
         updated: ts,
         ...settingsData // Spread any additional properties
       };
-      
+
       return await super.upsert(settingsEntity);
     } catch (error) {
       logger.error('Failed to upsert notification settings:', error);
@@ -37,7 +37,7 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
 
   async getSettings(pubkey: string): Promise<NotificationSettings | null> {
     try {
-      const id = `settings-${pubkey}`;
+      const id = `${this.entityType}-${pubkey}`;
       return await this.getById(id, pubkey);
     } catch (error) {
       logger.error('Failed to get notification settings:', error);
@@ -47,7 +47,7 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
 
   async deleteSettings(pubkey: string): Promise<void> {
     try {
-      const id = `settings-${pubkey}`;
+      const id = `${this.entityType}-${pubkey}`;
       await this.delete(id, pubkey);
     } catch (error) {
       logger.error('Failed to delete notification settings:', error);

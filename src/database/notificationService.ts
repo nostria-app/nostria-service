@@ -1,7 +1,7 @@
 import notificationSubscriptionRepository from './notificationSubscriptionRepository';
 import notificationSettingsRepository from './notificationSettingsRepository';
 import notificationLogRepository from './notificationLogRepository';
-import accountRepository from './accountRepositoryCosmosDb';
+import accountRepository from './accountRepository';
 import { NotificationSubscription } from '../models/notificationSubscription';
 import { NotificationSettings } from '../models/notificationSettings';
 import { NotificationLog } from '../models/notificationLog';
@@ -11,7 +11,6 @@ import { NotificationLog } from '../models/notificationLog';
  * Replaces the old tableStorage utility for CosmosDB
  */
 class NotificationService {
-
   // Subscription methods
   async upsertEntity(pubkey: string, deviceKey: string, data: { subscription: string }): Promise<NotificationSubscription> {
     const subscription = JSON.parse(data.subscription);

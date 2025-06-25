@@ -3,6 +3,21 @@ import notificationService from '../database/notificationService';
 import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
+import requireNIP98Auth from '../middleware/requireNIP98Auth';
+import { createRateLimit } from '../utils/rateLimit';
+import { NIP98AuthenticatedRequest } from './types';
+
+type SubscriptionRequest = NIP98AuthenticatedRequest;
+
+const authRateLimit = createRateLimit(
+  15 * 60 * 1000, // 15 minutes
+  500, // limit each IP to 500 requests per windowMs
+  'Too many authenticated requests from this IP, please try again later.'
+);
+
+// combined middleware to be used for routes requiring
+// authenticated user
+const authUser = [authRateLimit, requireNIP98Auth];
 
 /**
  * @openapi
@@ -179,24 +194,18 @@ interface DeviceInfo {
  *       '500':
  *         description: Failed to send notification
  */
-router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> => {
+router.post('/send/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-  let valid = false;
-  try {
-    valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
-  } catch (validationError) {
-    logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-    res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-    return;
-  }
-
-  if (!valid) {
-    res.status(401).json({ error: 'Invalid or missing authorization token' });
-    return;
-  }
-
+  // Don't get pubkey from route, but from authenticated user.
   const { pubkey } = req.params;
+  const pubKeyAuth = req.authenticatedPubkey;
+
+  if (pubkey !== pubKeyAuth) {
+    res.status(400).json({ error: 'Pubkey mismatch' });
+    return;
+  }
+
   const notification: NotificationData = req.body;
 
   const records = await notificationService.getUserEntities(pubkey);
@@ -285,25 +294,19 @@ router.post('/send/:pubkey', async (req: Request, res: Response): Promise<void> 
  *       '500':
  *         description: Failed to save subscription
  */
-router.post('/webpush/:pubkey', async (req: Request, res: Response): Promise<void> => {
+router.post('/webpush/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-    let valid = false;
-    try {
-      valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
-    } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-      return;
-    }
-
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or missing authorization token' });
-      return;
-    }
-
+    // Don't get pubkey from route, but from authenticated user.
     const { pubkey } = req.params;
+    const pubKeyAuth = req.authenticatedPubkey;
+
+    if (pubkey !== pubKeyAuth) {
+      res.status(400).json({ error: 'Pubkey mismatch' });
+      return;
+    }
+
     const subscription: PushSubscription = req.body;
 
     if (!pubkey || !subscription || !subscription.endpoint || !subscription.keys || !subscription.keys.p256dh) {
@@ -356,31 +359,22 @@ router.post('/webpush/:pubkey', async (req: Request, res: Response): Promise<voi
  * Save user notification settings
  * @route POST /api/subscription/settings/:pubkey
  */
-router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<void> => {
+router.post('/settings/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-    let valid = false;
-    try {
-      valid = await nip98.validateToken(req.headers.authorization!, url, 'POST');
-    } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-      return;
-    }
-
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or missing authorization token' });
-      return;
-    }
-
+    // Don't get pubkey from route, but from authenticated user.
     const { pubkey } = req.params;
+    const pubKeyAuth = req.authenticatedPubkey;
+
+    if (pubkey !== pubKeyAuth) {
+      res.status(400).json({ error: 'Pubkey mismatch' });
+      return;
+    }
+
     let settings: any = req.body;
 
-    if (!pubkey) {
-      res.status(400).json({ error: 'Invalid pubkey' });
-      return;
-    }    // Check if user has premium subscription for custom filters
+    // Check if user has premium subscription for custom filters
     // TODO: Enable this when premium subscriptions are implemented
     // const isPremium = await notificationService.hasPremiumSubscription(pubkey);
 
@@ -396,7 +390,7 @@ router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<vo
 
     // settings = [];    // Store the settings in CosmosDB
     await notificationService.upsertNotificationSettings(pubkey, {
-      settings: JSON.stringify(settings),
+      settings: settings,
     });
 
     logger.info(`Notification settings updated for user ${pubkey}`);
@@ -416,30 +410,20 @@ router.post('/settings/:pubkey', async (req: Request, res: Response): Promise<vo
  * Get all devices (subscriptions) for a user
  * @route GET /api/subscription/devices/:pubkey
  */
-router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void> => {
+router.get('/devices/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-    let valid = false;
-    try {
-      valid = await nip98.validateToken(req.headers.authorization!, url, 'GET');
-    } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-      return;
-    }
-
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or missing authorization token' });
-      return;
-    }
-
+    // Don't get pubkey from route, but from authenticated user.
     const { pubkey } = req.params;
+    const pubKeyAuth = req.authenticatedPubkey;
 
-    if (!pubkey) {
-      res.status(400).json({ error: 'Invalid pubkey' });
+    if (pubkey !== pubKeyAuth) {
+      res.status(400).json({ error: 'Pubkey mismatch' });
       return;
-    }    // Get all user subscription entities
+    }
+
+    // Get all user subscription entities
     const subscriptionEntities = await notificationService.getUserSubscriptions(pubkey);
 
     // Extract relevant info from subscription entities
@@ -471,40 +455,35 @@ router.get('/devices/:pubkey', async (req: Request, res: Response): Promise<void
  * Get user notification settings
  * @route GET /api/subscription/settings/:pubkey
  */
-router.get('/settings/:pubkey', async (req: Request, res: Response): Promise<void> => {
+router.get('/settings/:pubkey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-    let valid = false;
-    try {
-      valid = await nip98.validateToken(req.headers.authorization!, url, 'GET');
-    } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-      return;
-    }
-
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or missing authorization token' });
-      return;
-    }
-
+    // Don't get pubkey from route, but from authenticated user.
     const { pubkey } = req.params;
+    const pubKeyAuth = req.authenticatedPubkey;
 
-    if (!pubkey) {
-      res.status(400).json({ error: 'Invalid pubkey' });
+    if (pubkey !== pubKeyAuth) {
+      res.status(400).json({ error: 'Pubkey mismatch' });
       return;
-    }    // Get user settings from CosmosDB
-    const settings = await notificationService.getNotificationSettings(pubkey);    // Check if user has premium subscription
+    }
+
+    // Get user settings from CosmosDB
+    const settings = await notificationService.getNotificationSettings(pubkey);
+
+    // Check if user has premium subscription
     // const isPremium = await notificationService.hasPremiumSubscription(pubkey);
 
     if (!settings) {
       res.status(200).json({
-        enabled: true, // Default value
+        enabled: true,
+        // Default value
         // isPremium
       });
       return;
-    }    // Remove internal fields
+    }
+
+    // Remove internal fields
     const { partitionKey, rowKey, timestamp, ...userSettings } = settings || {};
 
     res.status(200).json({
@@ -521,25 +500,18 @@ router.get('/settings/:pubkey', async (req: Request, res: Response): Promise<voi
  * Delete user's subscription for a specific device
  * @route DELETE /api/subscription/webpush/:pubkey/:deviceKey
  */
-router.delete('/webpush/:pubkey/:deviceKey', async (req: Request, res: Response): Promise<void> => {
+router.delete('/webpush/:pubkey/:deviceKey', authUser, async (req: SubscriptionRequest, res: Response): Promise<void> => {
   try {
     const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
 
-    let valid = false;
-    try {
-      valid = await nip98.validateToken(req.headers.authorization!, url, 'DELETE');
-    } catch (validationError) {
-      logger.warn(`NIP-98 validation error: ${(validationError as Error).message}`);
-      res.status(401).json({ error: `Authorization validation failed: ${(validationError as Error).message}` });
-      return;
-    }
-
-    if (!valid) {
-      res.status(401).json({ error: 'Invalid or missing authorization token' });
-      return;
-    }
-
+    // Don't get pubkey from route, but from authenticated user.
     const { pubkey, deviceKey } = req.params;
+    const pubKeyAuth = req.authenticatedPubkey;
+
+    if (pubkey !== pubKeyAuth) {
+      res.status(400).json({ error: 'Pubkey mismatch' });
+      return;
+    }
 
     if (!pubkey || !deviceKey) {
       res.status(400).json({ error: 'Invalid pubkey or deviceKey' });

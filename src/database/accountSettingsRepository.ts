@@ -3,9 +3,9 @@ import CosmosDbBaseRepository from "./CosmosDbBaseRepository";
 import logger from "../utils/logger";
 import { now } from "../helpers/now";
 
-class UserSettingsRepository extends CosmosDbBaseRepository<UserSettings> {
+class AccountSettingsRepository extends CosmosDbBaseRepository<UserSettings> {
   constructor() {
-    super('user-settings');
+    super('account-settings');
   }
 
   /**
@@ -139,4 +139,4 @@ class UserSettingsRepository extends CosmosDbBaseRepository<UserSettings> {
   }
 }
 
-export default new UserSettingsRepository();
+export default new AccountSettingsRepository();

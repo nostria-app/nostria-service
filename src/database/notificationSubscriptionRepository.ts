@@ -11,10 +11,11 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
   async createSubscription(pubkey: string, subscription: any): Promise<NotificationSubscription> {
     try {
       const deviceKey = subscription.keys.p256dh;
+      const id = `notification-subscription-${pubkey}-${deviceKey}`; // Unique ID combining pubkey and device key
       const ts = now();
-      
+
       const subscriptionEntity: NotificationSubscription = {
-        id: `${pubkey}-${deviceKey}`, // Unique ID combining pubkey and device key
+        id: id,
         type: 'notification-subscription',
         pubkey,
         subscription,
@@ -22,7 +23,7 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
         created: ts,
         modified: ts
       };
-      
+
       return await super.upsert(subscriptionEntity);
     } catch (error) {
       logger.error('Failed to create notification subscription:', error);
@@ -49,7 +50,7 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
 
   async getSubscriptionByDeviceKey(pubkey: string, deviceKey: string): Promise<NotificationSubscription | null> {
     try {
-      const id = `${pubkey}-${deviceKey}`;
+      const id = `notification-subscription-${pubkey}-${deviceKey}`;
       return await this.getById(id, pubkey);
     } catch (error) {
       logger.error('Failed to get subscription by device key:', error);
@@ -59,7 +60,7 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
 
   async deleteSubscription(pubkey: string, deviceKey: string): Promise<void> {
     try {
-      const id = `${pubkey}-${deviceKey}`;
+      const id = `notification-subscription-${pubkey}-${deviceKey}`;
       await this.delete(id, pubkey);
     } catch (error) {
       logger.error('Failed to delete subscription:', error);

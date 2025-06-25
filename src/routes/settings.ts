@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import userSettingsRepository from '../database/userSettingsRepository';
+import userSettingsRepository from '../database/accountSettingsRepository';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
 import { UserSettingsUpdate, UserSettingsResponse } from '../models/userSettings';

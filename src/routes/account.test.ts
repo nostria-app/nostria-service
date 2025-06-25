@@ -20,8 +20,8 @@ jest.mock('../database/paymentRepositoryCosmosDb');
 import app from '../index';
 import { generateNIP98, testAccount, testPayment } from '../helpers/testHelper';
 
-import paymentRepository from '../database/paymentRepositoryCosmosDb';
-import accountRepository from '../database/accountRepositoryCosmosDb';
+import paymentRepository from '../database/paymentRepository';
+import accountRepository from '../database/accountRepository';
 import { DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 
 import config from '../config';

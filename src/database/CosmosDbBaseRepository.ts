@@ -172,16 +172,11 @@ export class CosmosDbBaseRepository<T extends CosmosDbEntity> {
     }
   }
 
-  protected async getById(id: string, partitionKey?: string): Promise<T | null> {
+  protected async getById(id: string, partitionKey: string): Promise<T | null> {
     try {
       await this.ensureInitialized();
 
-      // If no partition key provided, use the ID as partition key (for accounts where id = pubkey)
-      const pkValue = partitionKey || id;
-
-      console.log(`Fetching ${this.entityType} by id: ${id}, partitionKey: ${pkValue}`);
-
-      const response: ItemResponse<T> = await this.container.item(id, pkValue).read();
+      const response: ItemResponse<T> = await this.container.item(id, partitionKey).read();
 
       if (response.resource && response.resource.type === this.entityType) {
         return this.transformRecord(response.resource);
@@ -198,13 +193,13 @@ export class CosmosDbBaseRepository<T extends CosmosDbEntity> {
     }
   }
 
-  protected async delete(id: string, partitionKey?: string): Promise<void> {
+  protected async delete(id: string, partitionKey: string): Promise<void> {
     try {
       await this.ensureInitialized();
 
       // If no partition key provided, use the ID as partition key (for accounts where id = pubkey)
-      const pkValue = partitionKey || id;
-      await this.container.item(id, pkValue).delete();
+      await this.container.item(id, partitionKey).delete();
+
       logger.info(`Deleted ${this.entityType}: ${id}`);
     } catch (error: any) {
       if (error.code !== 404) {

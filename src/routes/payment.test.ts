@@ -21,7 +21,7 @@ jest.mock('../database/accountRepositoryCosmosDb');
 jest.mock('../services/LightningService');
 
 import app from '../index';
-import paymentRepository from '../database/paymentRepositoryCosmosDb';
+import paymentRepository from '../database/paymentRepository';
 import lightningService from '../services/LightningService';
 
 // Mock uuid

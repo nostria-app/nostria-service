@@ -5,7 +5,7 @@ import { createRateLimit } from '../utils/rateLimit';
 import { ErrorBody } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
-import paymentRepository from '../database/paymentRepositoryCosmosDb';
+import paymentRepository from '../database/paymentRepository';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
 import { now } from '../helpers/now';

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import app from '../index';
-import userSettingsRepository from '../database/userSettingsRepository';
+import userSettingsRepository from '../database/accountSettingsRepository';
 import { now } from '../helpers/now';
 
 // Mock the repository
