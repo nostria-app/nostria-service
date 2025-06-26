@@ -70,7 +70,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *         isActive:
  *           type: boolean
  *           description: Whether the account is active
-*          username:
+ *         username:
  *           type: string
  *           nullable: true
  *           description: User's username
