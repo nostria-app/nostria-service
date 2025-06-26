@@ -88,6 +88,16 @@ interface ErrorBodyWithMessage extends ErrorBody {
  *         metadata:
  *           type: object
  *           nullable: true
+ *     ErrorBody:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *           description: Error message
+ *         message:
+ *           type: string
+ *           description: Additional error details
+ *           nullable: true
  *   securitySchemes:
  *     NIP98Auth:
  *       type: http
