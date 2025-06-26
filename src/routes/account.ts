@@ -73,6 +73,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
  */
 interface PublicAccountDto {
   pubkey: string;
+  username: string;
   signupDate: number;
   tier: string;
   isActive: boolean;
@@ -150,7 +151,7 @@ type GetAccountResponse = Response<AccountDto | ErrorBody>
 
 type ApiResponse<T> = { success: boolean, message?: string, result?: T }
 
-type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string}, any, any, any>
+type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string }, any, any, any>
 
 /**
  * @openapi
@@ -311,7 +312,7 @@ const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, 
  */
 router.get('/tiers', (req: Request, res: Response) => {
   try {
-    
+
     // Map features to include human-readable labels
     const tiersWithLabels = Object.fromEntries(
       Object.entries(config.tiers)
@@ -421,7 +422,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
       // Create or update user account with subscription
       const tierDetails = config.tiers[payment.tier];
-      
+
       subscription = {
         tier: payment.tier,
         billingCycle: payment.billingCycle,
@@ -437,8 +438,8 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
     const ts = now();
 
-    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');    
-    
+    const canHaveUsername = subscription.entitlements.features.includes('USERNAME');
+
     const account: Account = {
       id: `account-${pubkey}`,
       type: 'account',
@@ -452,7 +453,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     };
 
     console.log(`Creating account:`, account);
-    
+
     const createdAccount = await accountRepository.create(account);
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
@@ -527,6 +528,7 @@ router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAcc
 
     // Public profile information
     const publicProfile: PublicAccountDto = {
+      username: account.username!,
       pubkey: account.pubkey,
       signupDate: account.created,
       tier: account.tier,
