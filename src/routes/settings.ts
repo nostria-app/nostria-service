@@ -50,12 +50,12 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           description: Social sharing preference
  *           example: true
  *         created:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Settings creation timestamp
  *         updated:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Settings last update timestamp
  *     UsersByReleaseChannel:
  *       type: object
@@ -91,11 +91,6 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           description: Success message
  *         data:
  *           $ref: '#/components/schemas/UserSettingsResponse'
- *   securitySchemes:
- *     NIP98Auth:
- *       type: http
- *       scheme: bearer
- *       description: NIP-98 authentication using Nostr events
  * tags:
  *   - name: Settings
  *     description: User settings management and preferences

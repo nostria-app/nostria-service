@@ -45,13 +45,13 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  *           description: Billing cycle
  *         pubkey:
  *           type: string
- *           description: User's public key in npub format
+ *           description: User's public key in hex format (64 lowercase hex chars, not npub)
  */
 interface CreatePaymentRequest {
   tierName: Tier;
   price: number; // USD cents
   billingCycle: BillingCycle;
-  pubkey: string; // npub format
+  pubkey: string; // hex format
 }
 
 /**
@@ -77,8 +77,8 @@ interface CreatePaymentRequest {
  *           enum: [pending, expired, paid]
  *           description: Payment status
  *         expires:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Expiry date
  */
 interface PaymentDto {
@@ -217,13 +217,19 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
 
 /**
  * @openapi
- * /payment/{paymentId}:
+ * /payment/{pubkey}/{paymentId}:
  *   get:
  *     operationId: "GetPayment" 
  *     summary: Get payment
  *     description: Get payment by id
  *     tags: [Payment]
  *     parameters:
+ *       - in: path
+ *         name: pubkey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: pubkey
  *       - in: path
  *         name: paymentId
  *         required: true

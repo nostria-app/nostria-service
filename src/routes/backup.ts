@@ -38,8 +38,8 @@ interface ErrorBodyWithMessage extends ErrorBody {
  *         backupType:
  *           $ref: '#/components/schemas/BackupType'
  *         scheduledAt:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Optional scheduled execution time (defaults to immediate)
  *         metadata:
  *           type: object
@@ -59,19 +59,19 @@ interface ErrorBodyWithMessage extends ErrorBody {
  *         backupType:
  *           $ref: '#/components/schemas/BackupType'
  *         requestedAt:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *         scheduledAt:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *         startedAt:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *         completedAt:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *         errorMessage:
  *           type: string
@@ -81,28 +81,13 @@ interface ErrorBodyWithMessage extends ErrorBody {
  *           nullable: true
  *           description: Download URL for completed backup (expires after some time)
  *         expires:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *           description: When the backup download link expires
  *         metadata:
  *           type: object
  *           nullable: true
- *     ErrorBody:
- *       type: object
- *       properties:
- *         error:
- *           type: string
- *           description: Error message
- *         message:
- *           type: string
- *           description: Additional error details
- *           nullable: true
- *   securitySchemes:
- *     NIP98Auth:
- *       type: http
- *       scheme: bearer
- *       description: NIP-98 authentication using Nostr events
  */
 
 // Rate limiting for backup operations
@@ -147,25 +132,25 @@ const router = express.Router();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       401:
  *         description: Unauthorized - Invalid NIP-98 authentication
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       429:
  *         description: Too many requests
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Internal server error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response<BackupJobResponse | ErrorBodyWithMessage>) => {
   try {
@@ -268,25 +253,25 @@ router.post('/', backupRateLimit, requireNIP98Auth, async (req: NIP98Authenticat
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       404:
  *         description: Backup job not found
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       429:
  *         description: Too many requests
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Internal server error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:jobId', backupQueryRateLimit, requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response<BackupJobResponse | ErrorBodyWithMessage>) => {
   try {
@@ -372,19 +357,19 @@ router.get('/:jobId', backupQueryRateLimit, requireNIP98Auth, async (req: NIP98A
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       429:
  *         description: Too many requests
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Internal server error
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorBody'
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', backupQueryRateLimit, requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
   try {

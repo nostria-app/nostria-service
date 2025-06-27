@@ -84,12 +84,12 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           nullable: true
  *           description: Browser user agent string
  *         created:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Device registration timestamp
  *         modified:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Last modification timestamp
  *     DevicesResponse:
  *       type: object
@@ -109,11 +109,6 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *       type: object
  *       description: User notification preferences and filters
  *       additionalProperties: true
- *   securitySchemes:
- *     NIP98Auth:
- *       type: http
- *       scheme: bearer
- *       description: NIP-98 authentication using Nostr events
  * tags:
  *   - name: Subscriptions
  *     description: Web Push subscription management and device registration

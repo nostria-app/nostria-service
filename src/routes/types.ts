@@ -1,6 +1,15 @@
 import { ParamsDictionary, Query } from 'express-serve-static-core';
 import { Request } from 'express';
 
+/**
+ * @openapi
+ * components:
+ *   securitySchemes:
+ *     NIP98Auth:
+ *       type: http
+ *       scheme: bearer
+ *       description: NIP-98 authentication using Nostr events
+ */
 export interface NIP98AuthenticatedRequest<
   P = ParamsDictionary,
   ResBody = any,
@@ -11,6 +20,22 @@ export interface NIP98AuthenticatedRequest<
   authenticatedPubkey?: string;
 };
 
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     Error:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *           description: Error message
+ *         message:
+ *           type: string
+ *           description: Additional error details
+ *           nullable: true
+ */
 export interface ErrorBody {
   error: string
 }

@@ -31,8 +31,8 @@ import logger from '../utils/logger';
  *           description: Public VAPID key for Web Push
  *           example: "BK8j..."
  *         timestamp:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Current server timestamp
  *         system:
  *           type: object

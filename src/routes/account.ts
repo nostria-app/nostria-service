@@ -14,16 +14,6 @@ import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/
 import { Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
 
-/**
- * @openapi
- * components:
- *   securitySchemes:
- *     NIP98Auth:
- *       type: http
- *       scheme: bearer
- *       description: NIP-98 authentication using Nostr events
- */
-
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
   500, // limit each IP to 500 requests per windowMs
@@ -61,8 +51,8 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           type: string
  *           description: User's public key
  *         signupDate:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Account creation date
  *         tier:
  *           type: string
@@ -98,17 +88,17 @@ interface PublicAccountDto {
  *           nullable: true
  *           description: User's username
  *         signupDate:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           description: Account creation date
  *         lastLoginDate:
- *           type: string
- *           format: date-time
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *           description: Last login date
- *         expiresAt:
- *           type: string
- *           format: date-time
+ *         expires:
+ *           type: number
+ *           format: timestamp
  *           nullable: true
  *           description: Subscription expiry date
  *         tier:
@@ -119,9 +109,9 @@ interface PublicAccountDto {
 interface AccountDto {
   pubkey: string;
   username?: string;
-  signupDate: number;
-  lastLoginDate?: number;
-  expires?: number;
+  signupDate: string;
+  lastLoginDate?: string;
+  expires?: string;
   tier: Tier;
   entitlements: Entitlements;
 }
@@ -190,27 +180,13 @@ type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBo
 type UpdateAccountRequest = NIP98AuthenticatedRequest<{}, any, Pick<Account, 'username'>, any>
 type UpdateAccountResponse = Response<AccountDto | ErrorBody>
 
-/**
- * @openapi
- * components:
- *   schemas:
- *     Error:
- *       type: object
- *       properties:
- *         error:
- *           type: string
- *           description: Error message
- */
-
-
-
 const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
-  signupDate: created,
-  lastLoginDate,
+  signupDate: new Date(created).toISOString(),
+  lastLoginDate: lastLoginDate ? new Date(lastLoginDate).toISOString() : undefined,
   tier,
-  expires,
+  expires: expires ? new Date(expires).toISOString() : undefined,
   entitlements: subscription?.entitlements,
 });
 
