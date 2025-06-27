@@ -47,7 +47,7 @@ describe('Payment Routes', () => {
       tierName: 'premium' as Tier,
       price: 999,
       billingCycle: 'monthly' as BillingCycle,
-      pubkey: generateKeyPair().npub,
+      pubkey: generateKeyPair().pubkey,
     };
 
     it('should create a payment invoice successfully', async () => {
