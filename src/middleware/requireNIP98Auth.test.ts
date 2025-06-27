@@ -57,7 +57,7 @@ describe('NIP98 Authentication Middleware', () => {
 
     await requireNIP98Auth(mockRequest as Request, mockResponse as Response, nextFunction);
     
-    expect((mockRequest as NIP98AuthenticatedRequest).authenticatedPubkey).toBe(auth.npub);
+    expect((mockRequest as NIP98AuthenticatedRequest).authenticatedPubkey).toBe(auth.pubkey);
     expect(nextFunction).toHaveBeenCalled();
   });
 });
