@@ -235,7 +235,25 @@ describe('Account API', () => {
       await request(app)
         .post('/api/account')
         .send({ username: 'bla' })
-        .expect(400);
+        .expect(400, { error: 'Public key is required' });
+    });
+
+    test('should return 400 if username is too short', async () => {
+      await request(app).post('/api/account')
+        .send({ pubkey: account.pubkey, username: 'oi' })
+        .expect(400, { error: 'Username must be at least 3 characters' });
+    });
+    
+    test('should return 400 if username is reserved', async () => {
+      await request(app).post('/api/account')
+        .send({ pubkey: account.pubkey, username: 'system' })
+        .expect(400, { error: 'This username is reserved' });
+    });
+    
+    test('should return 400 if username is not alphanumeric', async () => {
+      await request(app).post('/api/account')
+        .send({ pubkey: account.pubkey, username: 'Dude🤙' })
+        .expect(400, { error: 'Username can only contain letters, numbers, and underscores' });
     });
 
     test('should return 409 if account already exists', async () => {
