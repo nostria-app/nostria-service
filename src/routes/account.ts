@@ -13,6 +13,7 @@ import paymentRepository from '../database/paymentRepository';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
+import validateUsername from './account/validateUsername';
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -375,6 +376,11 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
     if (!pubkey) {
       return res.status(400).json({ error: 'Public key is required' });
+    }
+
+    const usernameError = validateUsername(username);
+    if (username?.trim() && usernameError) {
+      return res.status(400).json({ error: usernameError });
     }
 
     // Check if user already exists
