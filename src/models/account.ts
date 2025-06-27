@@ -10,6 +10,6 @@ export interface Account {
   subscription: AccountSubscription;
   expires?: number;
   created: number;
-  modified: number;
+  updated: number;
   lastLoginDate?: number;
 };

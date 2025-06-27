@@ -37,7 +37,8 @@ export interface NIP98AuthenticatedRequest<
  *           nullable: true
  */
 export interface ErrorBody {
-  error: string
+  error: string;
+  message?: string;
 }
 
 // Settings API types

@@ -4,7 +4,13 @@ import { Payment } from "../models/payment";
 import { DEFAULT_SUBSCRIPTION } from "../models/accountSubscription";
 import { now } from "./now";
 
-export const generateNIP98 = async (method = 'GET') => {
+export type NIP98Fixture = {
+  token: string;
+  privateKey: Uint8Array;
+  pubkey: string;
+}
+
+export const generateNIP98 = async (method = 'GET'): Promise<NIP98Fixture> => {
   const keyPair = generateKeyPair()
   const token = await nip98.getToken('http://localhost:3000/api/account', method, e => finalizeEvent(e, keyPair.privateKey))
   return {
@@ -19,22 +25,24 @@ export const generateKeyPair = () => {
   return {
     privateKey: sk,
     pubkey,
-    npub: nip19.npubEncode(pubkey),
   }
 }
 
-export const testAccount = (partial?: Partial<Account>): Account => ({
-  id: generateKeyPair().pubkey,
-  type: 'account',
-  pubkey: generateKeyPair().npub,
-  username: 'bla',
-  tier: 'free',
-  subscription: DEFAULT_SUBSCRIPTION,
-  expires: Date.now() + 1000000,
-  created: now(),
-  modified: now(),
-  ...partial,
-});
+export const testAccount = (partial?: Partial<Account>): Account => {
+  const pubkey = generateKeyPair().pubkey;
+  return {
+    id: pubkey,
+    type: 'account',
+    pubkey: pubkey,
+    username: 'bla',
+    tier: 'free',
+    subscription: DEFAULT_SUBSCRIPTION,
+    expires: Date.now() + 1000000,
+    created: now(),
+    modified: now(),
+    ...partial,
+  };
+};
 
 export const testPayment = (partial?: Partial<Payment>): Payment => {
   const at = now();
@@ -49,7 +57,7 @@ export const testPayment = (partial?: Partial<Payment>): Payment => {
     tier: 'premium',
     billingCycle: 'monthly',
     priceCents: 999,
-    pubkey: generateKeyPair().npub,
+    pubkey: generateKeyPair().pubkey,
     isPaid: false,
     created: at,
     modified: at,

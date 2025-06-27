@@ -14,24 +14,25 @@ jest.mock('../routes/notification', () => {
 });
 
 // Now import the app after mocks are set up
-jest.mock('../database/accountRepositoryCosmosDb');
-jest.mock('../database/paymentRepositoryCosmosDb');
+jest.mock('../database/accountRepository');
+jest.mock('../database/paymentRepository');
 
 import app from '../index';
-import { generateNIP98, testAccount, testPayment } from '../helpers/testHelper';
+import { generateNIP98, NIP98Fixture, testAccount, testPayment } from '../helpers/testHelper';
 
 import paymentRepository from '../database/paymentRepository';
 import accountRepository from '../database/accountRepository';
-import { DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
+import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
 
 import config from '../config';
 import { now } from '../helpers/now';
+import { Account } from '../models/account';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
 
 describe('Account API', () => {
-  let account: any;
+  let account: Account;
 
   beforeEach(() => {
     account = testAccount()
@@ -52,49 +53,49 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         signupDate: account.created,
         tier: account.tier,
-
+        username: account.username,
         isActive: true,
       });
     });
 
-    // test('should return proper tier', async () => {
-    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
-    //     tier: 'premium',
-    //   }))
-    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
-    //   expect(response.body.result).toHaveProperty("tier", 'premium');
-    // });
+    test('should return proper tier', async () => {
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(testAccount({
+        tier: 'premium',
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("tier", 'premium');
+    });
 
-    // test('should return isActive true if subscription is not expired', async () => {
-    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
-    //     expires: Date.now() + 1000
-    //   }))
-    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
-    //   expect(response.body.result).toHaveProperty("isActive", true);
-    // });
+    test('should return isActive true if subscription is not expired', async () => {
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(testAccount({
+        expires: Date.now() + 1000
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("isActive", true);
+    });
 
-    // test('should return isActive false if subscription expired', async () => {
-    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(testAccount({
-    //     expires: Date.now() - 100
-    //   }))
-    //   const response = await request(app).get(`/api/account/${account.pubkey}`)
-    //   expect(response.body.result).toHaveProperty("isActive", false);
-    // });
+    test('should return isActive false if subscription expired', async () => {
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(testAccount({
+        expires: Date.now() - 100
+      }))
+      const response = await request(app).get(`/api/account/${account.pubkey}`)
+      expect(response.body.result).toHaveProperty("isActive", false);
+    });
 
-    // test('should return success false if user does not exist for the pubkey', async () => {
-    //   mockAccountRepository.getByPubKey.mockResolvedValueOnce(null)
+    test('should return success false if user does not exist for the pubkey', async () => {
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null)
 
-    //   const response = await request(app)
-    //     .get(`/api/account/${account.pubkey}`)
-    //     .expect(200);
+      const response = await request(app)
+        .get(`/api/account/${account.pubkey}`)
+        .expect(200);
 
-    //   expect(response.body).toEqual({
-    //     success: false,
-    //     message: 'User not found'
-    //   });
+      expect(response.body).toEqual({
+        success: false,
+        message: 'User not found'
+      });
 
-    //   expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
-    // });
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
+    });
 
     test('should return existing user by username', async () => {
       mockAccountRepository.getByUsername.mockResolvedValueOnce(account)
@@ -107,8 +108,9 @@ describe('Account API', () => {
       expect(response.body).toHaveProperty("success", true);
       expect(response.body).toHaveProperty("result", {
         pubkey: account.pubkey,
-        signupDate: account.createdAt.toISOString(),
+        signupDate: account.created,
         tier: account.tier,
+        username: account.username,
         isActive: true,
       });
     });
@@ -153,18 +155,21 @@ describe('Account API', () => {
         .post('/api/account')
         .send({
           pubkey: account.pubkey,
-          username: account.username
+          username: account.username,
         })
         .expect(201);
 
       expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
+        id: `account-${account.pubkey}`,
+        type: 'account',
         pubkey: account.pubkey,
         tier: 'free',
         subscription: DEFAULT_SUBSCRIPTION,
         expires: undefined,
+        username: undefined,
         created: expect.any(Number),
-        updated: expect.any(Number), // test sets the same as createdAt
+        modified: expect.any(Number), // test sets the same as "created"
       });
 
       expect(mockPaymentRepository.get).not.toHaveBeenCalled();
@@ -173,7 +178,7 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         tier: 'free',
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
-        signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        signupDate: expect.any(Number),
       });
     });
 
@@ -198,6 +203,8 @@ describe('Account API', () => {
       expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(account.pubkey);
       expect(mockAccountRepository.create).toHaveBeenCalledWith({
         pubkey: account.pubkey,
+        id: `account-${account.pubkey}`,
+        type: 'account',
         tier: mockPayment.tier,
         username: account.username,
         subscription: {
@@ -211,16 +218,16 @@ describe('Account API', () => {
         },
         expires: expect.any(Number),
         created: expect.any(Number),
-        updated: expect.any(Number),
+        modified: expect.any(Number),
       });
 
       expect(response.body).toEqual({
         pubkey: account.pubkey,
         username: account.username,
         tier: mockPayment.tier,
-        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        expires: expect.any(Number),
         entitlements: config.tiers['premium'].entitlements,
-        signupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        signupDate: expect.any(Number),
       });
     });
 
@@ -289,7 +296,7 @@ describe('Account API', () => {
 
     test('should return account info when authenticated', async () => {
       const testAuth = await generateNIP98();
-      account = testAccount({ pubkey: testAuth.npub })
+      account = testAccount({ pubkey: testAuth.pubkey })
       mockAccountRepository.getByPubkey.mockResolvedValueOnce(account);
 
       const response = await request(app)
@@ -301,18 +308,18 @@ describe('Account API', () => {
         pubkey: account.pubkey,
         username: account.username,
         tier: 'free',
-        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        expires: expect.any(Number),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: account.created,
       });
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.pubkey);
     });
 
     test('should return 404 if account not found', async () => {
       // setup auth
       const testAuth = await generateNIP98();
-      account = testAccount({ pubkey: testAuth.npub })
+      account = testAccount({ pubkey: testAuth.pubkey })
 
       // make service return null for a pubkey
       mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
@@ -337,7 +344,7 @@ describe('Account API', () => {
   });
 
   describe('PUT /api/account', () => {
-    let testAuth: any;
+    let testAuth: NIP98Fixture;
 
     beforeAll(async () => {
       testAuth = await generateNIP98('PUT');
@@ -351,7 +358,7 @@ describe('Account API', () => {
     });
 
     test('should update account details when authenticated', async () => {
-      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
       const updatedAccount = {
         ...currentAccount,
         username: 'bob',
@@ -371,12 +378,12 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
-        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        expires: expect.any(Number),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.created,
       });
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.pubkey);
       expect(mockAccountRepository.update).toHaveBeenCalledWith({
         ...currentAccount,
         username: 'bob',
@@ -384,7 +391,7 @@ describe('Account API', () => {
     });
 
     test('should now allow to set username which is already taken', async () => {
-      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
       mockAccountRepository.update.mockRejectedValueOnce({ message: 'Username is already taken' });
       mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
 
@@ -397,7 +404,7 @@ describe('Account API', () => {
     });
 
     test('should keep existing details if updated weren\'t provided', async () => {
-      const currentAccount = testAccount({ pubkey: testAuth.npub });
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
       const updatedAccount = {
         ...currentAccount,
         modified: now()
@@ -416,12 +423,12 @@ describe('Account API', () => {
         pubkey: updatedAccount.pubkey,
         username: updatedAccount.username,
         tier: 'free',
-        expiresAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/),
+        expires: expect.any(Number),
         entitlements: DEFAULT_SUBSCRIPTION.entitlements,
         signupDate: updatedAccount.created,
       });
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.pubkey);
       expect(mockAccountRepository.update).toHaveBeenCalledWith(currentAccount);
     });
 
@@ -434,7 +441,7 @@ describe('Account API', () => {
         .send({ username: 'bla' })
         .expect(404);
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.pubkey);
       expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
 
@@ -447,7 +454,7 @@ describe('Account API', () => {
         .send({ username: 'bla' })
         .expect(500);
 
-      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.npub);
+      expect(mockAccountRepository.getByPubkey).toHaveBeenCalledWith(testAuth.pubkey);
       expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
   });

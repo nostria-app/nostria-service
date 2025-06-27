@@ -109,9 +109,9 @@ interface PublicAccountDto {
 interface AccountDto {
   pubkey: string;
   username?: string;
-  signupDate: string;
-  lastLoginDate?: string;
-  expires?: string;
+  signupDate: number;
+  lastLoginDate?: number;
+  expires?: number;
   tier: Tier;
   entitlements: Entitlements;
 }
@@ -183,10 +183,10 @@ type UpdateAccountResponse = Response<AccountDto | ErrorBody>
 const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, lastLoginDate }: Account): AccountDto => ({
   pubkey,
   username,
-  signupDate: new Date(created).toISOString(),
-  lastLoginDate: lastLoginDate ? new Date(lastLoginDate).toISOString() : undefined,
+  signupDate: created,
+  lastLoginDate,
   tier,
-  expires: expires ? new Date(expires).toISOString() : undefined,
+  expires,
   entitlements: subscription?.entitlements,
 });
 
@@ -434,11 +434,11 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
 
     console.log(`Creating account:`, account);
 
-    const createdAccount = await accountRepository.create(account);
+    await accountRepository.create(account);
 
     logger.info(`New account signup: ${pubkey.substring(0, 16)}... with username: ${username || 'none'}`);
 
-    return res.status(201).json(toAccountDto(createdAccount));
+    return res.status(201).json(toAccountDto(account));
   } catch (error: any) {
     logger.error(`Error during signup: ${error.message}`);
     return res.status(500).json({ error: 'Failed to register user' });
