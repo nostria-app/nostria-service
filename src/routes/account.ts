@@ -378,8 +378,9 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       return res.status(400).json({ error: 'Public key is required' });
     }
 
-    const usernameError = validateUsername(username);
-    if (username?.trim() && usernameError) {
+    const trimmedUsername = username?.trim();
+    const usernameError = validateUsername(trimmedUsername);
+    if (usernameError) {
       return res.status(400).json({ error: usernameError });
     }
 
@@ -430,7 +431,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       id: `account-${pubkey}`,
       type: 'account',
       pubkey,
-      username: canHaveUsername ? username : undefined,
+      username: canHaveUsername ? trimmedUsername : undefined,
       created: ts,
       modified: ts,
       tier: subscription.tier,
