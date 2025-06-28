@@ -384,9 +384,16 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     }
 
     const trimmedUsername = username?.trim();
-    const usernameError = validateUsername(trimmedUsername);
-    if (usernameError) {
-      return res.status(400).json({ error: usernameError });
+    if (trimmedUsername) {
+      const usernameError = validateUsername(trimmedUsername);
+      if (usernameError) {
+        return res.status(400).json({ error: usernameError });
+      }
+      
+      const existingAccountByUsername = await accountRepository.getByUsername(trimmedUsername);
+      if (existingAccountByUsername) {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
     }
 
     // Check if user already exists
