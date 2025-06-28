@@ -154,6 +154,8 @@ type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string }, any, any, a
  *   schemas:
  *     ApiResponse:
  *       type: object
+ *       required:
+ *         - success
  *       properties:
  *         success:
  *           type: boolean
@@ -165,6 +167,9 @@ type GetPublicAccountRequest = Request<{ pubkeyOrUsername: string }, any, any, a
  *           $ref: '#/components/schemas/PublicAccount'
  */
 type GetPublicAccountResponse = Response<ApiResponse<PublicAccountDto> | ErrorBody>
+
+type CheckUsernameRequest = Request<{ username: string }, any, any, any>
+type CheckUsernameResponse = Response<ApiResponse<{}> | ErrorBody>
 
 /**
  * @openapi
@@ -450,6 +455,69 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
     logger.error(`Error during signup: ${error.message}`);
     return res.status(500).json({ error: 'Failed to register user' });
   }
+});
+
+/**
+ * @openapi
+ * /account/check/{username}:
+ *   get:
+ *     operationId: "CheckUsername"
+ *     summary: Check username can be used
+ *     description: Checks the given username is correct and is not taken
+ *     tags:
+ *       - Account
+ *     parameters:
+ *       - name: username
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Username
+ *     responses:
+ *       '200':
+ *         description: Check result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiResponse'
+ *       '400':
+ *         description: Invalid request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameRequest, res: CheckUsernameResponse) => {
+  const username = req.params.username?.trim();
+
+  if (!username) {
+    return res.status(200).json({ success: false, error: 'Public key or username is required' });
+  }
+
+  const usernameError = validateUsername(username);
+  if (usernameError) {
+    return res.status(200).json({ success: false, message: usernameError });
+  }
+
+  const account = await accountRepository.getByUsername(username);
+
+  if (account) {
+    return res.status(200).json({ success: false, message: 'Username is taken' });
+  }
+
+  return res.status(200).json({ success: true });
 });
 
 /**
