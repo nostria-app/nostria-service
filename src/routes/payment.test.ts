@@ -2,7 +2,7 @@ import request from 'supertest';
 
 import { Tier, BillingCycle } from '../config/types';
 
-import { generateKeyPair, testPayment } from '../helpers/testHelper';
+import { generateKeyPair, generateNIP98, testPayment } from '../helpers/testHelper';
 
 // Mock the services
 // Mock removed - BaseRepository no longer exists
@@ -16,8 +16,8 @@ jest.mock('../routes/notification', () => {
   return router;
 });
 
-jest.mock('../database/paymentRepositoryCosmosDb');
-jest.mock('../database/accountRepositoryCosmosDb');
+jest.mock('../database/paymentRepository');
+jest.mock('../database/accountRepository');
 jest.mock('../services/LightningService');
 
 import app from '../index';
@@ -84,8 +84,9 @@ describe('Payment Routes', () => {
       expect(mockLightningService.getUsdBtcRate).toHaveBeenCalled();
       expect(mockLightningService.createInvoice).toHaveBeenCalledWith(22200, 'test-uuid-id', 'NostriaPremium');
       expect(mockPaymentRepository.create).toHaveBeenCalledWith({
-        id: 'test-uuid-id',
-        type: 'ln',
+        id: `payment-${mockInvoice.id}`,
+        type: 'payment',
+        paymentType: 'ln',
         lnHash: 'test-hash',
         lnInvoice: 'lnbc1234567890',
         lnAmountSat: 22200,
@@ -123,14 +124,14 @@ describe('Payment Routes', () => {
     });
 
     it('should return 400 for invalid pubkey format', async () => {
-      const invalidRequest = { ...validPaymentRequest, pubkey: 'invalid-pubkey' };
+      const invalidRequest = { ...validPaymentRequest, pubkey: 'npub12rv5lskctqxxs2c8rf2zlzc7xx3qpvzs3w4etgemauy9thegr43sf485vg' };
 
       const response = await request(app)
         .post('/api/payment')
         .send(invalidRequest)
         .expect(400);
 
-      expect(response.body.error).toBe('Invalid pubkey format. Must be npub format');
+      expect(response.body.error).toBe('Invalid pubkey format. Must be hex format');
     });
 
     it('should return 500 when external price API fails', async () => {
@@ -157,16 +158,17 @@ describe('Payment Routes', () => {
     });
   });
 
-  describe('GET /api/payment/:paymentId', () => {
+  describe('GET /api/payment/:pubkey/:paymentId', () => {
     const mockInvoice = testPayment();
 
     it('should return 400 when invoice not found', async () => {
       mockPaymentRepository.get.mockResolvedValue(null);
 
       const response = await request(app)
-        .get('/api/payment/non-existing-id')
-        .expect(400);
+        .get('/api/payment/som-pubkey/non-existing-id')
+        .expect(404);
 
+      expect(mockPaymentRepository.get).toHaveBeenCalledWith('non-existing-id', 'som-pubkey');
       expect(response.body.error).toBe('Payment Record not found');
     });
 
@@ -179,9 +181,10 @@ describe('Payment Routes', () => {
       mockPaymentRepository.get.mockResolvedValue(paidInvoice);
 
       const response = await request(app)
-        .get('/api/payment/test-id')
+        .get(`/api/payment/${paidInvoice.pubkey}/${paidInvoice.id}`)
         .expect(200);
 
+      expect(mockPaymentRepository.get).toHaveBeenCalledWith(paidInvoice.id, paidInvoice.pubkey);
       expect(mockLightningService.checkPaymentStatus).not.toHaveBeenCalled();
       expect(response.body).toEqual({
         id: mockInvoice.id,
@@ -198,7 +201,7 @@ describe('Payment Routes', () => {
       mockLightningService.checkPaymentStatus.mockResolvedValue(true);
 
       const response = await request(app)
-        .get('/api/payment/test-id')
+        .get(`/api/payment/${mockInvoice.pubkey}/${mockInvoice.id}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('status', 'paid');
@@ -206,7 +209,7 @@ describe('Payment Routes', () => {
         ...mockInvoice,
         isPaid: true,
         paid: expect.any(Number),
-        updated: expect.any(Number),
+        modified: expect.any(Number),
       });
     });
 
@@ -214,7 +217,8 @@ describe('Payment Routes', () => {
       mockPaymentRepository.get.mockResolvedValue(mockInvoice);
       mockLightningService.checkPaymentStatus.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/payment/test-id')
+      const response = await request(app)
+      .get(`/api/payment/${mockInvoice.pubkey}/${mockInvoice.id}`);
 
       expect(response.status).toEqual(200);
       expect(mockLightningService.checkPaymentStatus).toHaveBeenCalledTimes(1);
@@ -234,7 +238,8 @@ describe('Payment Routes', () => {
       mockPaymentRepository.get.mockResolvedValue(expiredInvoice);
       mockLightningService.checkPaymentStatus.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/payment/test-id');
+      const response = await request(app)
+        .get(`/api/payment/${mockInvoice.pubkey}/${mockInvoice.id}`);
 
       expect(response.status).toEqual(200);
       expect(mockLightningService.checkPaymentStatus).not.toHaveBeenCalled();
@@ -250,7 +255,8 @@ describe('Payment Routes', () => {
       mockPaymentRepository.get.mockResolvedValue(mockInvoice);
       mockLightningService.checkPaymentStatus.mockRejectedValue(new Error('Internal Server Error'));
 
-      const response = await request(app).get('/api/payment/test-id')
+      const response = await request(app)
+        .get(`/api/payment/${mockInvoice.pubkey}/${mockInvoice.id}`);
 
       expect(response.status).toEqual(500);
       expect(response.body.error).toBe('Internal server error');
