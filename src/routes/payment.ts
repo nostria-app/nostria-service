@@ -266,7 +266,7 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
     console.log('Payment record found:', paymentId, payment);
 
     if (!payment) {
-      return res.status(400).json({ error: 'Payment Record not found' });
+      return res.status(404).json({ error: 'Payment Record not found' });
     }
 
     // Check if already marked as paid
