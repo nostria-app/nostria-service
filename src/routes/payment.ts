@@ -157,14 +157,14 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       return res.status(500).json({ error: 'Invalid exchange rate data' });
     }
 
-    const price = config.tiers[tierName]?.pricing?.[billingCycle]?.priceCents;
+    const priceCents = config.tiers[tierName]?.pricing?.[billingCycle]?.priceCents;
 
-    if (!price) {
+    if (!priceCents) {
       return res.status(400).json({ error: 'Invalid tier or billing cycle' });
     }
 
     // Convert USD cents to satoshis
-    const usdAmount = price / 100; // Convert cents to dollars
+    const usdAmount = priceCents / 100; // Convert cents to dollars
     const satoshis = Math.round((usdAmount / usdRate) * 100000000); // Convert to satoshis
 
     // Generate unique invoice ID
@@ -194,7 +194,7 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       lnAmountSat: amountSat,
       tier: tierName,
       billingCycle,
-      priceCents: price,
+      priceCents,
       pubkey,
       isPaid: false,
       expires: ts + INVOICE_TTL,
