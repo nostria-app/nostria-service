@@ -28,7 +28,6 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  *       type: object
  *       required:
  *         - tierName
- *         - price
  *         - billingCycle
  *         - pubkey
  *       properties:
@@ -36,9 +35,6 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  *           type: string
  *           enum: [free, premium, premium_plus]
  *           description: Subscription tier name
- *         price:
- *           type: number
- *           description: Price in USD cents
  *         billingCycle:
  *           type: string
  *           enum: [monthly, quarterly, yearly]
@@ -49,7 +45,6 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  */
 interface CreatePaymentRequest {
   tierName: Tier;
-  price: number; // USD cents
   billingCycle: BillingCycle;
   pubkey: string; // hex format
 }
@@ -137,7 +132,7 @@ const toPaymentDto = ({ id, lnInvoice, expires }: Payment, status: PaymentStatus
  */
 router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: CreatePaymentResponseType) => {
   try {
-    const { tierName, price, billingCycle, pubkey } = req.body;
+    const { tierName, billingCycle, pubkey } = req.body;
 
     // Validate tier
     if (!config.tiers[tierName]) {
@@ -147,11 +142,6 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
     // Validate billing cycle
     if (!['monthly', 'quarterly', 'yearly'].includes(billingCycle)) {
       return res.status(400).json({ error: 'Invalid billing cycle' });
-    }
-
-    // Validate price
-    if (price <= 0) {
-      return res.status(400).json({ error: 'Price must be greater than 0' });
     }
 
     // Validate pubkey format (basic npub check)
@@ -165,6 +155,12 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
     if (!usdRate || typeof usdRate !== 'number') {
       logger.error('Invalid rate data received:', usdRate);
       return res.status(500).json({ error: 'Invalid exchange rate data' });
+    }
+
+    const price = config.tiers[tierName]?.pricing?.[billingCycle]?.priceCents;
+
+    if (!price) {
+      return res.status(400).json({ error: 'Invalid tier or billing cycle' });
     }
 
     // Convert USD cents to satoshis

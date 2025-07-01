@@ -2,7 +2,7 @@ import request from 'supertest';
 
 import { Tier, BillingCycle } from '../config/types';
 
-import { generateKeyPair, generateNIP98, testPayment } from '../helpers/testHelper';
+import { generateKeyPair, testPayment } from '../helpers/testHelper';
 
 // Mock the services
 // Mock removed - BaseRepository no longer exists
@@ -45,7 +45,6 @@ describe('Payment Routes', () => {
   describe('POST /api/payment', () => {
     const validPaymentRequest = {
       tierName: 'premium' as Tier,
-      price: 999,
       billingCycle: 'monthly' as BillingCycle,
       pubkey: generateKeyPair().pubkey,
     };
@@ -56,13 +55,12 @@ describe('Payment Routes', () => {
       mockLightningService.createInvoice.mockResolvedValue({
         serialized: 'lnbc1234567890',
         paymentHash: 'test-hash',
-        amountSat: 22200,
+        amountSat: 22222,
       });
 
       const mockInvoice = testPayment({
         pubkey: validPaymentRequest.pubkey,
         billingCycle: validPaymentRequest.billingCycle,
-        priceCents: validPaymentRequest.price,
         tier: validPaymentRequest.tierName,
       });
 
@@ -82,17 +80,17 @@ describe('Payment Routes', () => {
       });
 
       expect(mockLightningService.getUsdBtcRate).toHaveBeenCalled();
-      expect(mockLightningService.createInvoice).toHaveBeenCalledWith(22200, 'test-uuid-id', 'NostriaPremium');
+      expect(mockLightningService.createInvoice).toHaveBeenCalledWith(22222, 'test-uuid-id', 'NostriaPremium');
       expect(mockPaymentRepository.create).toHaveBeenCalledWith({
         id: `payment-${mockInvoice.id}`,
         type: 'payment',
         paymentType: 'ln',
         lnHash: 'test-hash',
         lnInvoice: 'lnbc1234567890',
-        lnAmountSat: 22200,
+        lnAmountSat: 22222,
         tier: 'premium',
         billingCycle: 'monthly',
-        priceCents: 999,
+        priceCents: 1000,
         pubkey: mockInvoice.pubkey,
         isPaid: false,
         created: expect.any(Number),
