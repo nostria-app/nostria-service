@@ -159,7 +159,7 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
 
     const priceCents = config.tiers[tierName]?.pricing?.[billingCycle]?.priceCents;
 
-    if (!priceCents) {
+    if (priceCents === undefined) {
       return res.status(400).json({ error: 'Invalid tier or billing cycle' });
     }
 
