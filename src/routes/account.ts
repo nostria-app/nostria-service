@@ -644,6 +644,7 @@ router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameR
  */
 router.get('/list', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
   try {
+    console.log('Account list endpoint reached with auth:', req.authenticatedPubkey);
     const limit = parseInt(req.query.limit as string) || 100;
     
     // Validate limit
@@ -709,6 +710,7 @@ router.get('/list', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res
  */
 router.get('/:pubkeyOrUsername', queryAccountRateLimit, async (req: GetPublicAccountRequest, res: GetPublicAccountResponse) => {
   try {
+    console.log('PubkeyOrUsername endpoint reached with param:', req.params.pubkeyOrUsername);
     const needle = req.params.pubkeyOrUsername;
 
     if (!needle) {
