@@ -2,13 +2,14 @@ import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
-import { ErrorBody } from './types';
+import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
 import paymentRepository from '../database/paymentRepository';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
 import { now } from '../helpers/now';
+import requireNIP98Auth from '../middleware/requireNIP98Auth';
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
@@ -307,6 +308,82 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
 
   } catch (error) {
     logger.error('Error checking payment status:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @openapi
+ * /payment:
+ *   get:
+ *     operationId: "ListPayments"
+ *     summary: List all payments
+ *     description: Get a list of all payment records (requires NIP-98 authentication)
+ *     tags: [Payment]
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: Maximum number of payments to return
+ *     responses:
+ *       200:
+ *         description: List of payments retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Payment'
+ *       401:
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    
+    // Validate limit
+    if (limit < 1 || limit > 1000) {
+      return res.status(400).json({ error: 'Limit must be between 1 and 1000' });
+    }
+
+    const payments = await paymentRepository.getAllPayments(limit);
+
+    // Convert payments to DTOs with status calculation
+    const paymentDtos = payments.map(payment => {
+      let status: PaymentStatus;
+      
+      if (payment.isPaid) {
+        status = 'paid';
+      } else if (payment.expires < now()) {
+        status = 'expired';
+      } else {
+        status = 'pending';
+      }
+
+      return toPaymentDto(payment, status);
+    });
+
+    logger.info(`Retrieved ${paymentDtos.length} payments for authenticated user ${req.authenticatedPubkey?.substring(0, 16)}...`);
+
+    return res.json(paymentDtos);
+  } catch (error) {
+    logger.error('Error retrieving payments:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });

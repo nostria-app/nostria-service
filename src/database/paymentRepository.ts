@@ -33,6 +33,23 @@ class PaymentRepository extends CosmosDbBaseRepository<Payment> {
       throw new Error(`Failed to get payment: ${(error as Error).message}`);
     }
   }
+
+  async getAllPayments(limit: number = 100): Promise<Payment[]> {
+    try {
+      const query = {
+        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC OFFSET 0 LIMIT @limit',
+        parameters: [
+          { name: '@type', value: 'payment' },
+          { name: '@limit', value: limit }
+        ]
+      };
+
+      return await this.query(query);
+    } catch (error) {
+      logger.error('Failed to get all payments:', error);
+      throw new Error(`Failed to get payments: ${(error as Error).message}`);
+    }
+  }
 }
 
 // Export singleton instance

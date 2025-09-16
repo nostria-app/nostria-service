@@ -2,7 +2,18 @@ import request from 'supertest';
 
 import { Tier, BillingCycle } from '../config/types';
 
-import { generateKeyPair, testPayment } from '../helpers/testHelper';
+import { generateKeyPair, testPayment, NIP98Fixture } from '../helpers/testHelper';
+import { finalizeEvent, nip98 } from 'nostr-tools';
+
+// Helper function to generate NIP-98 token for payment routes
+const generatePaymentNIP98 = async (method = 'GET', url = '/api/payment'): Promise<NIP98Fixture> => {
+  const keyPair = generateKeyPair()
+  const token = await nip98.getToken(`http://localhost:3000${url}`, method, e => finalizeEvent(e, keyPair.privateKey))
+  return {
+    ...keyPair,
+    token,
+  };
+};
 
 // Mock the services
 // Mock removed - BaseRepository no longer exists
@@ -255,6 +266,74 @@ describe('Payment Routes', () => {
 
       const response = await request(app)
         .get(`/api/payment/${mockInvoice.pubkey}/${mockInvoice.id}`);
+
+      expect(response.status).toEqual(500);
+      expect(response.body.error).toBe('Internal server error');
+    });
+  });
+
+  describe('GET /api/payment', () => {
+    it('should list payments with valid NIP-98 authentication', async () => {
+      const testAuth = await generatePaymentNIP98();
+      const mockPayments = [testPayment()];
+      
+      mockPaymentRepository.getAllPayments.mockResolvedValue(mockPayments);
+
+      const response = await request(app)
+        .get('/api/payment')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBe(1);
+      expect(response.body[0]).toHaveProperty('id');
+      expect(response.body[0]).toHaveProperty('lnInvoice');
+      expect(response.body[0]).toHaveProperty('status');
+      expect(response.body[0]).toHaveProperty('expires');
+      expect(mockPaymentRepository.getAllPayments).toHaveBeenCalledWith(100);
+    });
+
+    it('should require NIP-98 authentication', async () => {
+      const response = await request(app)
+        .get('/api/payment');
+
+      expect(response.status).toEqual(401);
+      expect(response.body.error).toBe('NIP98 Authorization header required');
+    });
+
+    it('should accept custom limit parameter', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment?limit=50');
+      const mockPayments: any[] = [];
+      
+      mockPaymentRepository.getAllPayments.mockResolvedValue(mockPayments);
+
+      const response = await request(app)
+        .get('/api/payment?limit=50')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(mockPaymentRepository.getAllPayments).toHaveBeenCalledWith(50);
+    });
+
+    it('should validate limit parameter bounds', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment?limit=2000');
+
+      const response = await request(app)
+        .get('/api/payment?limit=2000')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(400);
+      expect(response.body.error).toBe('Limit must be between 1 and 1000');
+    });
+
+    it('should return 500 when repository fails', async () => {
+      const testAuth = await generatePaymentNIP98();
+      
+      mockPaymentRepository.getAllPayments.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/payment')
+        .set('Authorization', `Nostr ${testAuth.token}`);
 
       expect(response.status).toEqual(500);
       expect(response.body.error).toBe('Internal server error');
