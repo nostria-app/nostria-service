@@ -1,4 +1,9 @@
+import path from 'path';
 import swaggerJsdoc from 'swagger-jsdoc';
+
+// Build glob patterns that work both in development (TS source) and production (compiled JS in dist)
+const routesGlobJs = path.join(__dirname, '..', 'routes', '*.js');
+const routesGlobTs = path.join(process.cwd(), 'src', 'routes', '*.ts');
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -25,7 +30,8 @@ const options: swaggerJsdoc.Options = {
       },
     },
   },
-  apis: ['./src/routes/*.ts'], // Path to the API routes
+  // Try compiled JS routes first (used in production), then TS sources (used in dev)
+  apis: [routesGlobJs, routesGlobTs],
 };
 
 export const swaggerSpec = swaggerJsdoc(options); 
