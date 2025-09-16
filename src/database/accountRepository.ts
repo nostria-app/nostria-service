@@ -103,9 +103,10 @@ class AccountRepository extends CosmosDbBaseRepository<Account> {
   async getAllAccounts(limit: number = 100): Promise<Account[]> {
     try {
       const query = {
-        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC',
+        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC OFFSET 0 LIMIT @limit',
         parameters: [
-          { name: '@type', value: 'account' }
+          { name: '@type', value: 'account' },
+          { name: '@limit', value: limit }
         ]
       };
 

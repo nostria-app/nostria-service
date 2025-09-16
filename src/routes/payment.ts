@@ -58,30 +58,97 @@ interface CreatePaymentRequest {
  *       type: object
  *       required:
  *         - id
+ *         - type
+ *         - paymentType
+ *         - lnHash
  *         - lnInvoice
- *         - status
+ *         - lnAmountSat
+ *         - tier
+ *         - billingCycle
+ *         - priceCents
+ *         - pubkey
+ *         - isPaid
  *         - expires
+ *         - status
+ *         - created
+ *         - modified
  *       properties:
  *         id:
  *           type: string
- *           description: Invoice ID
+ *           description: Payment ID
+ *         type:
+ *           type: string
+ *           enum: [payment]
+ *           description: Document type
+ *         paymentType:
+ *           type: string
+ *           enum: [ln]
+ *           description: Payment type (Lightning Network)
+ *         lnHash:
+ *           type: string
+ *           description: Lightning payment hash
  *         lnInvoice:
  *           type: string
- *           description: LN invoice
- *         status:
+ *           description: Lightning Network invoice
+ *         lnAmountSat:
+ *           type: number
+ *           description: Lightning amount in satoshis
+ *         tier:
  *           type: string
- *           enum: [pending, expired, paid]
- *           description: Payment status
+ *           enum: [free, premium, premium_plus]
+ *           description: Subscription tier
+ *         billingCycle:
+ *           type: string
+ *           enum: [monthly, quarterly, yearly]
+ *           description: Billing cycle
+ *         priceCents:
+ *           type: number
+ *           description: Price in cents (USD)
+ *         pubkey:
+ *           type: string
+ *           description: User's public key in hex format
+ *         isPaid:
+ *           type: boolean
+ *           description: Whether the payment has been completed
+ *         paid:
+ *           type: number
+ *           format: timestamp
+ *           description: Timestamp when payment was completed (optional)
+ *           nullable: true
  *         expires:
  *           type: number
  *           format: timestamp
- *           description: Expiry date
+ *           description: Payment expiry timestamp
+ *         status:
+ *           type: string
+ *           enum: [pending, expired, paid]
+ *           description: Calculated payment status
+ *         created:
+ *           type: number
+ *           format: timestamp
+ *           description: Creation timestamp
+ *         modified:
+ *           type: number
+ *           format: timestamp
+ *           description: Last modification timestamp
  */
 interface PaymentDto {
   id: string;
+  type: 'payment';
+  paymentType: 'ln';
+  lnHash: string;
   lnInvoice: string;
-  status: PaymentStatus;
+  lnAmountSat: number;
+  tier: Tier;
+  billingCycle: BillingCycle;
+  priceCents: number;
+  pubkey: string;
+  isPaid: boolean;
+  paid?: number;
   expires: number;
+  status: PaymentStatus;
+  created: number;
+  modified: number;
 }
 
 type CreatePaymentRequestType = Request<{}, any, CreatePaymentRequest, any>;
@@ -90,11 +157,23 @@ type CreatePaymentResponseType = Response<PaymentDto | ErrorBody>;
 type GetPaymentRequest = Request<{ pubkey: string, paymentId: string }, any, any, any>;
 type GetPaymentResponse = Response<PaymentDto | ErrorBody>;
 
-const toPaymentDto = ({ id, lnInvoice, expires }: Payment, status: PaymentStatus): PaymentDto => ({
-  id,
-  lnInvoice,
+const toPaymentDto = (payment: Payment, status: PaymentStatus): PaymentDto => ({
+  id: payment.id,
+  type: payment.type,
+  paymentType: payment.paymentType,
+  lnHash: payment.lnHash,
+  lnInvoice: payment.lnInvoice,
+  lnAmountSat: payment.lnAmountSat,
+  tier: payment.tier,
+  billingCycle: payment.billingCycle,
+  priceCents: payment.priceCents,
+  pubkey: payment.pubkey,
+  isPaid: payment.isPaid,
+  paid: payment.paid,
+  expires: payment.expires,
   status,
-  expires,
+  created: payment.created,
+  modified: payment.modified,
 });
 
 /**

@@ -476,4 +476,104 @@ describe('Account API', () => {
       expect(mockAccountRepository.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /api/account/list', () => {
+    it('should list accounts with valid NIP-98 authentication', async () => {
+      const testAuth = await generateNIP98();
+      const mockAccounts = [testAccount()];
+      
+      mockAccountRepository.getAllAccounts.mockResolvedValue(mockAccounts);
+
+      const response = await request(app)
+        .get('/api/account/list')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBe(1);
+      expect(response.body[0]).toHaveProperty('id');
+      expect(response.body[0]).toHaveProperty('type');
+      expect(response.body[0]).toHaveProperty('pubkey');
+      expect(response.body[0]).toHaveProperty('tier');
+      expect(response.body[0]).toHaveProperty('subscription');
+      expect(response.body[0]).toHaveProperty('created');
+      expect(response.body[0]).toHaveProperty('modified');
+      expect(response.body[0].type).toBe('account');
+      expect(mockAccountRepository.getAllAccounts).toHaveBeenCalledWith(100);
+    });
+
+    it('should require NIP-98 authentication', async () => {
+      const response = await request(app)
+        .get('/api/account/list');
+
+      expect(response.status).toEqual(401);
+      expect(response.body.error).toBe('NIP98 Authorization header required');
+    });
+
+    it('should accept custom limit parameter', async () => {
+      const testAuth = await generateNIP98();
+      const mockAccounts: any[] = [];
+      
+      mockAccountRepository.getAllAccounts.mockResolvedValue(mockAccounts);
+
+      const response = await request(app)
+        .get('/api/account/list?limit=50')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(mockAccountRepository.getAllAccounts).toHaveBeenCalledWith(50);
+    });
+
+    it('should validate limit parameter bounds', async () => {
+      const testAuth = await generateNIP98();
+
+      const response = await request(app)
+        .get('/api/account/list?limit=2000')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(400);
+      expect(response.body.error).toBe('Limit must be between 1 and 1000');
+    });
+
+    it('should return 500 when repository fails', async () => {
+      const testAuth = await generateNIP98();
+      
+      mockAccountRepository.getAllAccounts.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/account/list')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(500);
+      expect(response.body.error).toBe('Internal server error');
+    });
+
+    it('should return accounts with all expected fields', async () => {
+      const testAuth = await generateNIP98();
+      const mockAccount = testAccount({
+        username: 'testuser',
+        lastLoginDate: now() - 3600000 // 1 hour ago
+      });
+      
+      mockAccountRepository.getAllAccounts.mockResolvedValue([mockAccount]);
+
+      const response = await request(app)
+        .get('/api/account/list')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body[0]).toEqual({
+        id: mockAccount.id,
+        type: mockAccount.type,
+        pubkey: mockAccount.pubkey,
+        username: mockAccount.username,
+        tier: mockAccount.tier,
+        subscription: mockAccount.subscription,
+        expires: mockAccount.expires,
+        created: mockAccount.created,
+        modified: mockAccount.modified,
+        lastLoginDate: mockAccount.lastLoginDate,
+      });
+    });
+  });
 });

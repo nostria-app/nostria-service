@@ -28,6 +28,13 @@ const queryAccountRateLimit = createRateLimit(
   'Too many signup attempts from this IP, please try again later.',
 );
 
+// List endpoints - moderate limits for administrative use
+const listRateLimit = createRateLimit(
+  1 * 60 * 1000, // 1 minute
+  100, // limit each IP to 100 list requests per minute
+  'Too many list requests from this IP, please try again later.',
+);
+
 // Signup endpoints - very restrictive to prevent abuse
 const signupRateLimit = createRateLimit(
   60 * 60 * 1000, // 1 hour
@@ -115,6 +122,73 @@ interface AccountDto {
   expires?: number;
   tier: Tier;
   entitlements: Entitlements;
+}
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     AccountList:
+ *       type: object
+ *       required:
+ *         - id
+ *         - type
+ *         - pubkey
+ *         - tier
+ *         - created
+ *         - modified
+ *       properties:
+ *         id:
+ *           type: string
+ *           description: Account ID (same as pubkey)
+ *         type:
+ *           type: string
+ *           enum: [account]
+ *           description: Document type
+ *         pubkey:
+ *           type: string
+ *           description: User's public key in hex format
+ *         username:
+ *           type: string
+ *           nullable: true
+ *           description: User's username
+ *         tier:
+ *           type: string
+ *           enum: [free, premium, premium_plus]
+ *           description: Subscription tier
+ *         subscription:
+ *           type: object
+ *           description: Account subscription details
+ *         expires:
+ *           type: number
+ *           format: timestamp
+ *           nullable: true
+ *           description: Subscription expiry timestamp
+ *         created:
+ *           type: number
+ *           format: timestamp
+ *           description: Account creation timestamp
+ *         modified:
+ *           type: number
+ *           format: timestamp
+ *           description: Last modification timestamp
+ *         lastLoginDate:
+ *           type: number
+ *           format: timestamp
+ *           nullable: true
+ *           description: Last login timestamp
+ */
+interface AccountListDto {
+  id: string;
+  type: 'account';
+  pubkey: string;
+  username?: string;
+  tier: Tier;
+  subscription: AccountSubscription;
+  expires?: number;
+  created: number;
+  modified: number;
+  lastLoginDate?: number;
 }
 
 /**
@@ -529,6 +603,70 @@ router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameR
 
 /**
  * @openapi
+ * /account/list:
+ *   get:
+ *     operationId: "ListAccounts"
+ *     summary: List all accounts
+ *     description: Get a list of all account records (requires NIP-98 authentication)
+ *     tags: [Account]
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: Maximum number of accounts to return
+ *     responses:
+ *       200:
+ *         description: List of accounts retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/AccountList'
+ *       401:
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/list', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    
+    // Validate limit
+    if (limit < 1 || limit > 1000) {
+      return res.status(400).json({ error: 'Limit must be between 1 and 1000' });
+    }
+
+    const accounts = await accountRepository.getAllAccounts(limit);
+
+    // Convert accounts to DTOs
+    const accountDtos = accounts.map(account => toAccountListDto(account));
+
+    logger.info(`Retrieved ${accountDtos.length} accounts for authenticated user ${req.authenticatedPubkey?.substring(0, 16)}...`);
+
+    return res.json(accountDtos);
+  } catch (error) {
+    logger.error('Error retrieving accounts:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @openapi
  * /account/{pubkeyOrUsername}:
  *   get:
  *     operationId: "GetPublicAccount"
@@ -757,6 +895,20 @@ router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountRe
     logger.error(`Update account error for ${req.authenticatedPubkey || 'unknown'}: ${error.message}`);
     return res.status(500).json({ error: 'Failed to update account information' });
   }
+});
+
+// Helper function to convert Account to AccountListDto
+const toAccountListDto = (account: Account): AccountListDto => ({
+  id: account.id,
+  type: account.type as 'account',
+  pubkey: account.pubkey,
+  username: account.username,
+  tier: account.tier,
+  subscription: account.subscription,
+  expires: account.expires,
+  created: account.created,
+  modified: account.modified,
+  lastLoginDate: account.lastLoginDate,
 });
 
 export default router; 
