@@ -18,6 +18,7 @@ import keyRoutes from './routes/key';
 import paymentRoutes from './routes/payment';
 import backupRoutes from './routes/backup';
 import settingsRoutes from './routes/settings';
+import swaggerRoutes from './routes/swagger';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -54,6 +55,9 @@ app.get('/openapi.json', (req, res) => {
 
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Expose raw OpenAPI JSON via dedicated routes
+app.use('/', swaggerRoutes);
 
 // Routes
 app.use('/api/subscription', subscriptionRoutes);
