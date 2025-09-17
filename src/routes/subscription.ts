@@ -4,10 +4,15 @@ import webPush from '../utils/webPush';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
+import requireAdminAuth from '../middleware/requireAdminAuth';
 import { createRateLimit } from '../utils/rateLimit';
 import { NIP98AuthenticatedRequest } from './types';
+import RepositoryFactory from '../database/RepositoryFactory';
 
 type SubscriptionRequest = NIP98AuthenticatedRequest;
+
+// Get repository instance from factory
+const notificationSubscriptionRepository = RepositoryFactory.getNotificationSubscriptionRepository();
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -540,6 +545,74 @@ router.delete('/webpush/:pubkey/:deviceKey', authUser, async (req: SubscriptionR
   } catch (error) {
     logger.error(`Error deleting subscription: ${(error as Error).message}`);
     res.status(500).json({ error: 'Failed to delete subscription' });
+  }
+});
+
+/**
+ * @openapi
+ * /subscription/list:
+ *   get:
+ *     operationId: "ListSubscriptions"
+ *     summary: List all notification subscriptions (Admin only)
+ *     description: Get a list of all notification subscription records (requires admin authentication)
+ *     tags: [Subscriptions]
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: Maximum number of subscriptions to return
+ *     responses:
+ *       200:
+ *         description: List of subscriptions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/NotificationSubscription'
+ *       401:
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Forbidden - Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    console.log('Subscription list endpoint reached with auth:', req.authenticatedPubkey);
+    const limit = parseInt(req.query.limit as string) || 100;
+    
+    // Validate limit
+    if (limit < 1 || limit > 1000) {
+      return res.status(400).json({ error: 'Limit must be between 1 and 1000' });
+    }
+
+    const subscriptions = await notificationSubscriptionRepository.getAllSubscriptions(limit);
+
+    logger.info(`Retrieved ${subscriptions.length} subscriptions for admin user ${req.authenticatedPubkey?.substring(0, 16)}...`);
+
+    return res.json(subscriptions);
+  } catch (error) {
+    logger.error('Error retrieving subscriptions:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

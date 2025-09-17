@@ -10,6 +10,7 @@ import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
 import { now } from '../helpers/now';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
+import requireAdminAuth from '../middleware/requireAdminAuth';
 
 // Get repository instance from factory
 const paymentRepository = RepositoryFactory.getPaymentRepository();
@@ -399,8 +400,8 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
  * /payment:
  *   get:
  *     operationId: "ListPayments"
- *     summary: List all payments
- *     description: Get a list of all payment records (requires NIP-98 authentication)
+ *     summary: List all payments (Admin only)
+ *     description: Get a list of all payment records (requires admin authentication)
  *     tags: [Payment]
  *     security:
  *       - NIP98Auth: []
@@ -428,6 +429,12 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Forbidden - Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Internal server error
  *         content:
@@ -435,7 +442,7 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+router.get('/', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string) || 100;
     

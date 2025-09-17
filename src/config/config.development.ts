@@ -22,6 +22,9 @@ const PremiumPlusFeatures: Feature[] = [
 
 const config: Config = {
   env: 'development',
+  admin: {
+    pubkeys: process.env.ADMIN_PUBKEYS ? process.env.ADMIN_PUBKEYS.split(',').map(key => key.trim()) : []
+  },
   tiers: {
     free: {
       tier: 'free',

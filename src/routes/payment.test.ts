@@ -15,6 +15,18 @@ const generatePaymentNIP98 = async (method = 'GET', url = '/api/payment'): Promi
   };
 };
 
+// Helper function to generate admin NIP-98 token for payment routes
+const generateAdminPaymentNIP98 = async (method = 'GET', url = '/api/payment'): Promise<NIP98Fixture> => {
+  const keyPair = generateKeyPair();
+  // Use the admin pubkey from mocked config
+  keyPair.pubkey = 'test_admin_payment_pubkey';
+  const token = await nip98.getToken(`http://localhost:3000${url}`, method, e => finalizeEvent(e, keyPair.privateKey));
+  return {
+    ...keyPair,
+    token,
+  };
+};
+
 // Mock the services
 // Mock removed - BaseRepository no longer exists
 jest.mock('../routes/subscription', () => {
@@ -30,6 +42,23 @@ jest.mock('../routes/notification', () => {
 jest.mock('../database/paymentRepository');
 jest.mock('../database/accountRepository');
 jest.mock('../services/LightningService');
+
+// Mock config for admin authentication
+jest.mock('../config', () => ({
+  admin: {
+    pubkeys: ['test_admin_payment_pubkey']
+  },
+  tiers: {
+    free: {
+      tier: 'free',
+      name: 'Free',
+      entitlements: {
+        notificationsPerDay: 5,
+        features: ['BASIC_WEBPUSH', 'COMMUNITY_SUPPORT']
+      }
+    }
+  }
+}));
 
 import app from '../index';
 import paymentRepository from '../database/paymentRepository';
@@ -273,8 +302,8 @@ describe('Payment Routes', () => {
   });
 
   describe('GET /api/payment', () => {
-    it('should list payments with valid NIP-98 authentication', async () => {
-      const testAuth = await generatePaymentNIP98();
+    it('should list payments with valid admin authentication', async () => {
+      const testAuth = await generateAdminPaymentNIP98();
       const mockPayments = [testPayment()];
       
       mockPaymentRepository.getAllPayments.mockResolvedValue(mockPayments);
@@ -293,6 +322,17 @@ describe('Payment Routes', () => {
       expect(mockPaymentRepository.getAllPayments).toHaveBeenCalledWith(100);
     });
 
+    it('should deny access for non-admin users', async () => {
+      const testAuth = await generatePaymentNIP98();
+
+      const response = await request(app)
+        .get('/api/payment')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(403);
+      expect(response.body.error).toBe('Admin access required');
+    });
+
     it('should require NIP-98 authentication', async () => {
       const response = await request(app)
         .get('/api/payment');
@@ -302,7 +342,7 @@ describe('Payment Routes', () => {
     });
 
     it('should accept custom limit parameter', async () => {
-      const testAuth = await generatePaymentNIP98('GET', '/api/payment?limit=50');
+      const testAuth = await generateAdminPaymentNIP98('GET', '/api/payment?limit=50');
       const mockPayments: any[] = [];
       
       mockPaymentRepository.getAllPayments.mockResolvedValue(mockPayments);
@@ -316,7 +356,7 @@ describe('Payment Routes', () => {
     });
 
     it('should validate limit parameter bounds', async () => {
-      const testAuth = await generatePaymentNIP98('GET', '/api/payment?limit=2000');
+      const testAuth = await generateAdminPaymentNIP98('GET', '/api/payment?limit=2000');
 
       const response = await request(app)
         .get('/api/payment?limit=2000')
@@ -327,7 +367,7 @@ describe('Payment Routes', () => {
     });
 
     it('should return 500 when repository fails', async () => {
-      const testAuth = await generatePaymentNIP98();
+      const testAuth = await generateAdminPaymentNIP98();
       
       mockPaymentRepository.getAllPayments.mockRejectedValue(new Error('Database error'));
 

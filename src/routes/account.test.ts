@@ -17,8 +17,26 @@ jest.mock('../routes/notification', () => {
 jest.mock('../database/accountRepository');
 jest.mock('../database/paymentRepository');
 
+// Mock config for admin authentication
+jest.mock('../config', () => ({
+  admin: {
+    pubkeys: ['test_admin_pubkey']
+  },
+  tiers: {
+    free: {
+      tier: 'free',
+      name: 'Free',
+      entitlements: {
+        notificationsPerDay: 5,
+        features: ['BASIC_WEBPUSH', 'COMMUNITY_SUPPORT']
+      }
+    }
+  }
+}));
+
 import app from '../index';
-import { generateNIP98, NIP98Fixture, testAccount, testPayment } from '../helpers/testHelper';
+import { generateNIP98, NIP98Fixture, testAccount, testPayment, generateKeyPair } from '../helpers/testHelper';
+import { finalizeEvent, nip98 } from 'nostr-tools';
 
 import paymentRepository from '../database/paymentRepository';
 import accountRepository from '../database/accountRepository';
@@ -30,6 +48,18 @@ import { Account } from '../models/account';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
+
+// Helper function to generate admin NIP-98 token
+const generateAdminNIP98 = async (method = 'GET', url = '/api/account/list'): Promise<NIP98Fixture> => {
+  const keyPair = generateKeyPair();
+  // Use the admin pubkey from mocked config
+  keyPair.pubkey = 'test_admin_pubkey';
+  const token = await nip98.getToken(`http://localhost:3000${url}`, method, e => finalizeEvent(e, keyPair.privateKey));
+  return {
+    ...keyPair,
+    token,
+  };
+};
 
 describe('Account API', () => {
   let account: Account;
@@ -478,8 +508,8 @@ describe('Account API', () => {
   });
 
   describe('GET /api/account/list', () => {
-    it('should list accounts with valid NIP-98 authentication', async () => {
-      const testAuth = await generateNIP98();
+    it('should list accounts with valid admin authentication', async () => {
+      const testAuth = await generateAdminNIP98();
       const mockAccounts = [testAccount()];
       
       mockAccountRepository.getAllAccounts.mockResolvedValue(mockAccounts);
@@ -502,6 +532,17 @@ describe('Account API', () => {
       expect(mockAccountRepository.getAllAccounts).toHaveBeenCalledWith(100);
     });
 
+    it('should deny access for non-admin users', async () => {
+      const testAuth = await generateNIP98();
+
+      const response = await request(app)
+        .get('/api/account/list')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(403);
+      expect(response.body.error).toBe('Admin access required');
+    });
+
     it('should require NIP-98 authentication', async () => {
       const response = await request(app)
         .get('/api/account/list');
@@ -511,7 +552,7 @@ describe('Account API', () => {
     });
 
     it('should accept custom limit parameter', async () => {
-      const testAuth = await generateNIP98();
+      const testAuth = await generateAdminNIP98();
       const mockAccounts: any[] = [];
       
       mockAccountRepository.getAllAccounts.mockResolvedValue(mockAccounts);
@@ -525,7 +566,7 @@ describe('Account API', () => {
     });
 
     it('should validate limit parameter bounds', async () => {
-      const testAuth = await generateNIP98();
+      const testAuth = await generateAdminNIP98();
 
       const response = await request(app)
         .get('/api/account/list?limit=2000')
@@ -536,7 +577,7 @@ describe('Account API', () => {
     });
 
     it('should return 500 when repository fails', async () => {
-      const testAuth = await generateNIP98();
+      const testAuth = await generateAdminNIP98();
       
       mockAccountRepository.getAllAccounts.mockRejectedValue(new Error('Database error'));
 
@@ -549,7 +590,7 @@ describe('Account API', () => {
     });
 
     it('should return accounts with all expected fields', async () => {
-      const testAuth = await generateNIP98();
+      const testAuth = await generateAdminNIP98();
       const mockAccount = testAccount({
         username: 'testuser',
         lastLoginDate: now() - 3600000 // 1 hour ago

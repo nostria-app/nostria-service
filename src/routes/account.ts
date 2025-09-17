@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
+import requireAdminAuth from '../middleware/requireAdminAuth';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isPotentiallyPubkey, isValidNpub } from '../utils/nostr';
 import config from '../config';
@@ -609,8 +610,8 @@ router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameR
  * /account/list:
  *   get:
  *     operationId: "ListAccounts"
- *     summary: List all accounts
- *     description: Get a list of all account records (requires NIP-98 authentication)
+ *     summary: List all accounts (Admin only)
+ *     description: Get a list of all account records (requires admin authentication)
  *     tags: [Account]
  *     security:
  *       - NIP98Auth: []
@@ -638,6 +639,12 @@ router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameR
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Forbidden - Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  *       500:
  *         description: Internal server error
  *         content:
@@ -645,7 +652,7 @@ router.get('/check/:username', queryAccountRateLimit, async (req: CheckUsernameR
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/list', requireNIP98Auth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res: Response) => {
   try {
     console.log('Account list endpoint reached with auth:', req.authenticatedPubkey);
     const limit = parseInt(req.query.limit as string) || 100;

@@ -29,4 +29,7 @@ export interface TierDetails {
 export type Config = {
   env: 'production' | 'development';
   tiers: Record<Tier, TierDetails>;
+  admin: {
+    pubkeys: string[];
+  };
 }
