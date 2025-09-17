@@ -3,8 +3,14 @@ import { databaseFeatures } from '../config/features';
 import RepositoryFactory from '../database/RepositoryFactory';
 import accountRepository from '../database/accountRepository';
 import backupJobRepository from '../database/backupJobRepository';
+import notificationSubscriptionRepository from '../database/notificationSubscriptionRepository';
+import paymentRepository from '../database/paymentRepository';
+import notificationSettingsRepository from '../database/notificationSettingsRepository';
 import PrismaAccountRepository from '../database/PrismaAccountRepository';
 import PrismaBackupJobRepository from '../database/PrismaBackupJobRepository';
+import PrismaNotificationSubscriptionRepository from '../database/PrismaNotificationSubscriptionRepository';
+import PrismaPaymentRepository from '../database/PrismaPaymentRepository';
+import PrismaNotificationSettingsRepository from '../database/PrismaNotificationSettingsRepository';
 
 export interface MigrationProgress {
   total: number;
@@ -219,35 +225,72 @@ export class DataMigrationUtility {
    * Get migration statistics
    */
   static async getMigrationStats(): Promise<{
-    cosmos: { accounts: number; backupJobs: number };
-    postgres: { accounts: number; backupJobs: number };
+    cosmos: {
+      accounts: number;
+      backupJobs: number;
+      notificationSubscriptions: number;
+      payments: number;
+      notificationSettings: number;
+    };
+    postgres: {
+      accounts: number;
+      backupJobs: number;
+      notificationSubscriptions: number;
+      payments: number;
+      notificationSettings: number;
+    };
   }> {
     try {
       const cosmosAccountRepo = accountRepository;
       const cosmosBackupRepo = backupJobRepository;
+      const cosmosNotificationSubscriptionRepo = notificationSubscriptionRepository;
+      const cosmosPaymentRepo = paymentRepository;
+      const cosmosNotificationSettingsRepo = notificationSettingsRepository;
+
       const postgresAccountRepo = new PrismaAccountRepository();
       const postgresBackupRepo = new PrismaBackupJobRepository();
+      const postgresNotificationSubscriptionRepo = new PrismaNotificationSubscriptionRepository();
+      const postgresPaymentRepo = new PrismaPaymentRepository();
+      const postgresNotificationSettingsRepo = new PrismaNotificationSettingsRepository();
 
       const [
         cosmosAccounts,
         cosmosBackupJobs,
+        cosmosNotificationSubscriptions,
+        cosmosPayments,
+        cosmosNotificationSettings,
         postgresAccounts,
-        postgresBackupJobs
+        postgresBackupJobs,
+        postgresNotificationSubscriptions,
+        postgresPayments,
+        postgresNotificationSettings
       ] = await Promise.all([
         cosmosAccountRepo.getAllAccounts(10000), // Large number to get all
         cosmosBackupRepo.getPendingBackupJobs(10000), // This is a proxy for total count
+        cosmosNotificationSubscriptionRepo.getAllSubscriptions(10000),
+        cosmosPaymentRepo.getAllPayments(10000),
+        cosmosNotificationSettingsRepo.getAllSettings(10000),
         postgresAccountRepo.getAllAccounts(10000),
-        postgresBackupRepo.getPendingBackupJobs(10000)
+        postgresBackupRepo.getPendingBackupJobs(10000),
+        postgresNotificationSubscriptionRepo.getAllSubscriptions(10000),
+        postgresPaymentRepo.getAllPayments(10000),
+        postgresNotificationSettingsRepo.getAllSettings(10000)
       ]);
 
       return {
         cosmos: {
           accounts: cosmosAccounts.length,
-          backupJobs: cosmosBackupJobs.length
+          backupJobs: cosmosBackupJobs.length,
+          notificationSubscriptions: cosmosNotificationSubscriptions.length,
+          payments: cosmosPayments.length,
+          notificationSettings: cosmosNotificationSettings.length,
         },
         postgres: {
           accounts: postgresAccounts.length,
-          backupJobs: postgresBackupJobs.length
+          backupJobs: postgresBackupJobs.length,
+          notificationSubscriptions: postgresNotificationSubscriptions.length,
+          payments: postgresPayments.length,
+          notificationSettings: postgresNotificationSettings.length,
         }
       };
     } catch (error) {
@@ -257,18 +300,225 @@ export class DataMigrationUtility {
   }
 
   /**
+   * Migrate notification subscriptions from CosmosDB to PostgreSQL
+   */
+  static async migrateNotificationSubscriptions(options: MigrationOptions = {}): Promise<MigrationProgress> {
+    const { batchSize = this.DEFAULT_BATCH_SIZE, skipExisting = true, dryRun = false } = options;
+    
+    // Check migration mode using direct environment variable to avoid module loading timing issues
+    const migrationMode = process.env.MIGRATION_MODE === 'true';
+    if (!migrationMode && !dryRun) {
+      throw new Error('Migration mode is not enabled. Set MIGRATION_MODE=true to proceed.');
+    }
+
+    logger.info('Starting notification subscription migration from CosmosDB to PostgreSQL', { 
+      batchSize, 
+      skipExisting, 
+      dryRun 
+    });
+
+    const progress: MigrationProgress = { total: 0, migrated: 0, failed: 0, errors: [] };
+
+    try {
+      const cosmosRepo = notificationSubscriptionRepository;
+      const postgresRepo = new PrismaNotificationSubscriptionRepository();
+
+      // Get all notification subscriptions from CosmosDB
+      const subscriptions = await cosmosRepo.getAllSubscriptions(1000); // Get a large batch
+      progress.total = subscriptions.length;
+
+      logger.info(`Found ${progress.total} notification subscriptions to migrate`);
+
+      for (const subscription of subscriptions) {
+        try {
+          if (!dryRun) {
+            if (skipExisting) {
+              // Check if subscription already exists
+              const existingSubscription = await postgresRepo.getSubscription(subscription.id, subscription.pubkey);
+              if (existingSubscription) {
+                logger.debug(`Notification subscription ${subscription.id} already exists, skipping`);
+                progress.migrated++;
+                continue;
+              }
+            }
+
+            // Migrate the notification subscription
+            await postgresRepo.createSubscription(subscription.pubkey, subscription.subscription);
+          }
+          
+          progress.migrated++;
+          logger.debug(`${dryRun ? '[DRY RUN] ' : ''}Migrated notification subscription: ${subscription.id}`);
+        } catch (error) {
+          progress.failed++;
+          const errorMessage = `Failed to migrate notification subscription ${subscription.id}: ${(error as Error).message}`;
+          progress.errors.push(errorMessage);
+          logger.error(errorMessage, error);
+        }
+      }
+
+      logger.info(`Notification subscription migration completed: ${progress.migrated}/${progress.total} migrated, ${progress.failed} failed`);
+      return progress;
+    } catch (error) {
+      logger.error('Notification subscription migration failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Migrate payments from CosmosDB to PostgreSQL
+   */
+  static async migratePayments(options: MigrationOptions = {}): Promise<MigrationProgress> {
+    const { batchSize = this.DEFAULT_BATCH_SIZE, skipExisting = true, dryRun = false } = options;
+    
+    // Check migration mode using direct environment variable to avoid module loading timing issues
+    const migrationMode = process.env.MIGRATION_MODE === 'true';
+    if (!migrationMode && !dryRun) {
+      throw new Error('Migration mode is not enabled. Set MIGRATION_MODE=true to proceed.');
+    }
+
+    logger.info('Starting payment migration from CosmosDB to PostgreSQL', { 
+      batchSize, 
+      skipExisting, 
+      dryRun 
+    });
+
+    const progress: MigrationProgress = { total: 0, migrated: 0, failed: 0, errors: [] };
+
+    try {
+      const cosmosRepo = paymentRepository;
+      const postgresRepo = new PrismaPaymentRepository();
+
+      // Get all payments from CosmosDB
+      const payments = await cosmosRepo.getAllPayments(1000); // Get a large batch
+      progress.total = payments.length;
+
+      logger.info(`Found ${progress.total} payments to migrate`);
+
+      for (const payment of payments) {
+        try {
+          if (!dryRun) {
+            if (skipExisting) {
+              // Check if payment already exists
+              const existingPayment = await postgresRepo.get(payment.id, payment.pubkey);
+              if (existingPayment) {
+                logger.debug(`Payment ${payment.id} already exists, skipping`);
+                progress.migrated++;
+                continue;
+              }
+            }
+
+            // Migrate the payment
+            await postgresRepo.create(payment);
+          }
+          
+          progress.migrated++;
+          logger.debug(`${dryRun ? '[DRY RUN] ' : ''}Migrated payment: ${payment.id}`);
+        } catch (error) {
+          progress.failed++;
+          const errorMessage = `Failed to migrate payment ${payment.id}: ${(error as Error).message}`;
+          progress.errors.push(errorMessage);
+          logger.error(errorMessage, error);
+        }
+      }
+
+      logger.info(`Payment migration completed: ${progress.migrated}/${progress.total} migrated, ${progress.failed} failed`);
+      return progress;
+    } catch (error) {
+      logger.error('Payment migration failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Migrate notification settings from CosmosDB to PostgreSQL
+   */
+  static async migrateNotificationSettings(options: MigrationOptions = {}): Promise<MigrationProgress> {
+    const { batchSize = this.DEFAULT_BATCH_SIZE, skipExisting = true, dryRun = false } = options;
+    
+    // Check migration mode using direct environment variable to avoid module loading timing issues
+    const migrationMode = process.env.MIGRATION_MODE === 'true';
+    if (!migrationMode && !dryRun) {
+      throw new Error('Migration mode is not enabled. Set MIGRATION_MODE=true to proceed.');
+    }
+
+    logger.info('Starting notification settings migration from CosmosDB to PostgreSQL', { 
+      batchSize, 
+      skipExisting, 
+      dryRun 
+    });
+
+    const progress: MigrationProgress = { total: 0, migrated: 0, failed: 0, errors: [] };
+
+    try {
+      const cosmosRepo = notificationSettingsRepository;
+      const postgresRepo = new PrismaNotificationSettingsRepository();
+
+      // Get all notification settings from CosmosDB
+      const settings = await cosmosRepo.getAllSettings(1000); // Get a large batch
+      progress.total = settings.length;
+
+      logger.info(`Found ${progress.total} notification settings to migrate`);
+
+      for (const setting of settings) {
+        try {
+          if (!dryRun) {
+            if (skipExisting) {
+              // Check if settings already exist
+              const existingSetting = await postgresRepo.getSettings(setting.pubkey);
+              if (existingSetting) {
+                logger.debug(`Notification settings for ${setting.pubkey} already exist, skipping`);
+                progress.migrated++;
+                continue;
+              }
+            }
+
+            // Migrate the notification settings
+            await postgresRepo.upsertSettings(setting.pubkey, {
+              enabled: setting.enabled,
+              filters: setting.filters,
+              settings: setting.settings
+            });
+          }
+          
+          progress.migrated++;
+          logger.debug(`${dryRun ? '[DRY RUN] ' : ''}Migrated notification settings: ${setting.id}`);
+        } catch (error) {
+          progress.failed++;
+          const errorMessage = `Failed to migrate notification settings ${setting.id}: ${(error as Error).message}`;
+          progress.errors.push(errorMessage);
+          logger.error(errorMessage, error);
+        }
+      }
+
+      logger.info(`Notification settings migration completed: ${progress.migrated}/${progress.total} migrated, ${progress.failed} failed`);
+      return progress;
+    } catch (error) {
+      logger.error('Notification settings migration failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Complete migration process with validation
    */
   static async performFullMigration(options: MigrationOptions = {}): Promise<{
     accounts: MigrationProgress;
+    backupJobs: MigrationProgress;
+    notificationSubscriptions: MigrationProgress;
+    payments: MigrationProgress;
+    notificationSettings: MigrationProgress;
     validation: { verified: number; failed: number };
   }> {
     const { dryRun = false } = options;
 
-    logger.info(`Starting full migration${dryRun ? ' (DRY RUN)' : ''}`);
+    logger.info(`Starting full migration of all data types${dryRun ? ' (DRY RUN)' : ''}`);
 
-    // Migrate accounts
+    // Migrate all data types
     const accountProgress = await this.migrateAccounts(options);
+    const backupJobProgress = await this.migrateUserBackupJobs('', options); // Empty string gets all backup jobs
+    const notificationSubscriptionProgress = await this.migrateNotificationSubscriptions(options);
+    const paymentProgress = await this.migratePayments(options);
+    const notificationSettingsProgress = await this.migrateNotificationSettings(options);
 
     // Verify a sample of migrated accounts
     const sampleSize = Math.min(10, accountProgress.migrated);
@@ -291,6 +541,10 @@ export class DataMigrationUtility {
 
     return {
       accounts: accountProgress,
+      backupJobs: backupJobProgress,
+      notificationSubscriptions: notificationSubscriptionProgress,
+      payments: paymentProgress,
+      notificationSettings: notificationSettingsProgress,
       validation: { verified, failed }
     };
   }

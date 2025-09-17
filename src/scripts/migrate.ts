@@ -33,12 +33,15 @@ async function main() {
 Usage: tsx migrate.ts <command>
 
 Commands:
-  accounts      - Migrate all accounts from CosmosDB to PostgreSQL
-  user <pubkey> - Migrate specific user's data (accounts + backup jobs)
-  verify <pubkey> - Verify migration consistency for a specific user
-  stats         - Show migration statistics
-  full          - Perform full migration with verification
-  dry-run       - Perform a dry run migration (no actual changes)
+  accounts              - Migrate all accounts from CosmosDB to PostgreSQL
+  notifications         - Migrate all notification subscriptions
+  payments              - Migrate all payments
+  settings              - Migrate all notification settings
+  user <pubkey>         - Migrate specific user's data (accounts + backup jobs)
+  verify <pubkey>       - Verify migration consistency for a specific user
+  stats                 - Show migration statistics for all data types
+  full                  - Perform full migration of all data types with verification
+  dry-run               - Perform a dry run migration (no actual changes)
 
 Environment setup required:
   MIGRATION_MODE=true
@@ -56,6 +59,18 @@ Environment setup required:
     switch (command) {
       case 'accounts':
         await migrateAccounts();
+        break;
+      
+      case 'notifications':
+        await migrateNotifications();
+        break;
+      
+      case 'payments':
+        await migratePayments();
+        break;
+      
+      case 'settings':
+        await migrateSettings();
         break;
       
       case 'user':
@@ -122,6 +137,66 @@ async function migrateAccounts() {
   }
 }
 
+async function migrateNotifications() {
+  logger.info('Starting notification subscription migration...');
+  const progress = await DataMigrationUtility.migrateNotificationSubscriptions({
+    batchSize: 50,
+    skipExisting: true
+  });
+  
+  console.log('\n=== Notification Subscription Migration Results ===');
+  console.log(`Total subscriptions: ${progress.total}`);
+  console.log(`Successfully migrated: ${progress.migrated}`);
+  console.log(`Failed: ${progress.failed}`);
+  
+  if (progress.errors.length > 0) {
+    console.log('\nErrors:');
+    progress.errors.forEach((error, index) => {
+      console.log(`${index + 1}. ${error}`);
+    });
+  }
+}
+
+async function migratePayments() {
+  logger.info('Starting payment migration...');
+  const progress = await DataMigrationUtility.migratePayments({
+    batchSize: 50,
+    skipExisting: true
+  });
+  
+  console.log('\n=== Payment Migration Results ===');
+  console.log(`Total payments: ${progress.total}`);
+  console.log(`Successfully migrated: ${progress.migrated}`);
+  console.log(`Failed: ${progress.failed}`);
+  
+  if (progress.errors.length > 0) {
+    console.log('\nErrors:');
+    progress.errors.forEach((error, index) => {
+      console.log(`${index + 1}. ${error}`);
+    });
+  }
+}
+
+async function migrateSettings() {
+  logger.info('Starting notification settings migration...');
+  const progress = await DataMigrationUtility.migrateNotificationSettings({
+    batchSize: 50,
+    skipExisting: true
+  });
+  
+  console.log('\n=== Notification Settings Migration Results ===');
+  console.log(`Total settings: ${progress.total}`);
+  console.log(`Successfully migrated: ${progress.migrated}`);
+  console.log(`Failed: ${progress.failed}`);
+  
+  if (progress.errors.length > 0) {
+    console.log('\nErrors:');
+    progress.errors.forEach((error, index) => {
+      console.log(`${index + 1}. ${error}`);
+    });
+  }
+}
+
 async function migrateUser(pubkey: string) {
   logger.info(`Starting migration for user: ${pubkey}`);
   
@@ -175,16 +250,28 @@ async function showStats() {
   console.log('CosmosDB:');
   console.log(`  Accounts: ${stats.cosmos.accounts}`);
   console.log(`  Backup Jobs: ${stats.cosmos.backupJobs}`);
+  console.log(`  Notification Subscriptions: ${stats.cosmos.notificationSubscriptions}`);
+  console.log(`  Payments: ${stats.cosmos.payments}`);
+  console.log(`  Notification Settings: ${stats.cosmos.notificationSettings}`);
   console.log('PostgreSQL:');
   console.log(`  Accounts: ${stats.postgres.accounts}`);
   console.log(`  Backup Jobs: ${stats.postgres.backupJobs}`);
+  console.log(`  Notification Subscriptions: ${stats.postgres.notificationSubscriptions}`);
+  console.log(`  Payments: ${stats.postgres.payments}`);
+  console.log(`  Notification Settings: ${stats.postgres.notificationSettings}`);
   
   const accountProgress = stats.postgres.accounts / Math.max(stats.cosmos.accounts, 1) * 100;
   const backupJobProgress = stats.postgres.backupJobs / Math.max(stats.cosmos.backupJobs, 1) * 100;
+  const notificationProgress = stats.postgres.notificationSubscriptions / Math.max(stats.cosmos.notificationSubscriptions, 1) * 100;
+  const paymentProgress = stats.postgres.payments / Math.max(stats.cosmos.payments, 1) * 100;
+  const settingsProgress = stats.postgres.notificationSettings / Math.max(stats.cosmos.notificationSettings, 1) * 100;
   
   console.log('\nMigration Progress:');
   console.log(`  Accounts: ${accountProgress.toFixed(1)}%`);
   console.log(`  Backup Jobs: ${backupJobProgress.toFixed(1)}%`);
+  console.log(`  Notification Subscriptions: ${notificationProgress.toFixed(1)}%`);
+  console.log(`  Payments: ${paymentProgress.toFixed(1)}%`);
+  console.log(`  Notification Settings: ${settingsProgress.toFixed(1)}%`);
 }
 
 async function fullMigration() {
@@ -196,18 +283,30 @@ async function fullMigration() {
   });
   
   console.log('\n=== Full Migration Results ===');
-  console.log(`Accounts migrated: ${result.accounts.migrated}/${result.accounts.total}`);
-  console.log(`Accounts failed: ${result.accounts.failed}`);
+  console.log(`Accounts migrated: ${result.accounts.migrated}/${result.accounts.total} (failed: ${result.accounts.failed})`);
+  console.log(`Backup Jobs migrated: ${result.backupJobs.migrated}/${result.backupJobs.total} (failed: ${result.backupJobs.failed})`);
+  console.log(`Notification Subscriptions migrated: ${result.notificationSubscriptions.migrated}/${result.notificationSubscriptions.total} (failed: ${result.notificationSubscriptions.failed})`);
+  console.log(`Payments migrated: ${result.payments.migrated}/${result.payments.total} (failed: ${result.payments.failed})`);
+  console.log(`Notification Settings migrated: ${result.notificationSettings.migrated}/${result.notificationSettings.total} (failed: ${result.notificationSettings.failed})`);
   console.log(`Verification: ${result.validation.verified} passed, ${result.validation.failed} failed`);
   
-  if (result.accounts.errors.length > 0) {
+  // Show errors from all data types
+  const allErrors = [
+    ...result.accounts.errors,
+    ...result.backupJobs.errors,
+    ...result.notificationSubscriptions.errors,
+    ...result.payments.errors,
+    ...result.notificationSettings.errors
+  ];
+  
+  if (allErrors.length > 0) {
     console.log('\nErrors:');
-    result.accounts.errors.slice(0, 10).forEach((error, index) => {
+    allErrors.slice(0, 10).forEach((error, index) => {
       console.log(`${index + 1}. ${error}`);
     });
     
-    if (result.accounts.errors.length > 10) {
-      console.log(`... and ${result.accounts.errors.length - 10} more errors`);
+    if (allErrors.length > 10) {
+      console.log(`... and ${allErrors.length - 10} more errors`);
     }
   }
 }
@@ -222,14 +321,30 @@ async function dryRunMigration() {
   });
   
   console.log('\n=== Dry Run Results ===');
-  console.log(`Would migrate ${result.accounts.migrated}/${result.accounts.total} accounts`);
-  console.log(`Would fail ${result.accounts.failed} accounts`);
+  console.log(`Would migrate ${result.accounts.migrated}/${result.accounts.total} accounts (${result.accounts.failed} would fail)`);
+  console.log(`Would migrate ${result.backupJobs.migrated}/${result.backupJobs.total} backup jobs (${result.backupJobs.failed} would fail)`);
+  console.log(`Would migrate ${result.notificationSubscriptions.migrated}/${result.notificationSubscriptions.total} notification subscriptions (${result.notificationSubscriptions.failed} would fail)`);
+  console.log(`Would migrate ${result.payments.migrated}/${result.payments.total} payments (${result.payments.failed} would fail)`);
+  console.log(`Would migrate ${result.notificationSettings.migrated}/${result.notificationSettings.total} notification settings (${result.notificationSettings.failed} would fail)`);
   
-  if (result.accounts.errors.length > 0) {
+  // Show errors from all data types
+  const allErrors = [
+    ...result.accounts.errors,
+    ...result.backupJobs.errors,
+    ...result.notificationSubscriptions.errors,
+    ...result.payments.errors,
+    ...result.notificationSettings.errors
+  ];
+  
+  if (allErrors.length > 0) {
     console.log('\nPotential errors:');
-    result.accounts.errors.slice(0, 5).forEach((error, index) => {
+    allErrors.slice(0, 5).forEach((error, index) => {
       console.log(`${index + 1}. ${error}`);
     });
+    
+    if (allErrors.length > 5) {
+      console.log(`... and ${allErrors.length - 5} more potential errors`);
+    }
   }
 }
 

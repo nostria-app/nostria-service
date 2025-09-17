@@ -84,6 +84,23 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
       throw new Error(`Failed to get all user pubkeys: ${(error as Error).message}`);
     }
   }
+
+  async getAllSubscriptions(limit: number = 100): Promise<NotificationSubscription[]> {
+    try {
+      const query = {
+        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC OFFSET 0 LIMIT @limit',
+        parameters: [
+          { name: '@type', value: 'notification-subscription' },
+          { name: '@limit', value: limit }
+        ]
+      };
+
+      return await this.query(query);
+    } catch (error) {
+      logger.error('Failed to get all subscriptions:', error);
+      throw new Error(`Failed to get all subscriptions: ${(error as Error).message}`);
+    }
+  }
 }
 
 export default new NotificationSubscriptionRepository();

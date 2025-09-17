@@ -54,6 +54,23 @@ class NotificationSettingsRepository extends CosmosDbBaseRepository<Notification
       throw new Error(`Failed to delete notification settings: ${(error as Error).message}`);
     }
   }
+
+  async getAllSettings(limit: number = 100): Promise<NotificationSettings[]> {
+    try {
+      const query = {
+        query: 'SELECT * FROM c WHERE c.type = @type ORDER BY c.created DESC OFFSET 0 LIMIT @limit',
+        parameters: [
+          { name: '@type', value: 'notification-settings' },
+          { name: '@limit', value: limit }
+        ]
+      };
+
+      return await this.query(query);
+    } catch (error) {
+      logger.error('Failed to get all settings:', error);
+      throw new Error(`Failed to get all settings: ${(error as Error).message}`);
+    }
+  }
 }
 
 export default new NotificationSettingsRepository();
