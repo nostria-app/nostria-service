@@ -9,11 +9,11 @@ WORKDIR /app
 # Install app dependencies including dev dependencies for TypeScript compilation
 COPY package*.json ./
 COPY tsconfig.json ./
+COPY prisma/ ./prisma/
 RUN npm ci && npm cache clean --force
 
-# Bundle app source - copy necessary files including prisma schema
+# Bundle app source
 COPY src/ ./src/
-COPY prisma/ ./prisma/
 
 # Build TypeScript to JavaScript
 RUN npm run build
@@ -28,12 +28,10 @@ WORKDIR /app
 RUN mkdir -p /app/data && \
     chmod -R 755 /app/data
 
-# Copy package.json for production dependencies only
+# Copy package.json and prisma schema BEFORE npm install (needed for postinstall script)
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy prisma schema for runtime (needed for Prisma client)
 COPY prisma/ ./prisma/
+RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application and static files from build stage
 COPY --from=build /app/dist ./dist
