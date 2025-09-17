@@ -21,7 +21,8 @@
     "migrate:stats": "tsx src/scripts/migrate.ts stats",
     "migrate:verify": "tsx src/scripts/migrate.ts verify",
     "migrate:full": "tsx src/scripts/migrate.ts full",
-    "migrate:dry-run": "tsx src/scripts/migrate.ts dry-run"
+    "migrate:dry-run": "tsx src/scripts/migrate.ts dry-run",
+    "postinstall": "prisma generate"
   },
   "keywords": [
     "nostria",
