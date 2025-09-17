@@ -8,6 +8,9 @@ import path from 'path';
 import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
+import { databaseFeatures } from './config/features';
+import PrismaClientSingleton from './database/prismaClient';
+import RepositoryFactory from './database/RepositoryFactory';
 
 // Import routes
 import account from './routes/account';
@@ -24,6 +27,51 @@ import swaggerRoutes from './routes/swagger';
 import { apiKeyAuth } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import logger from './utils/logger';
+
+// Database initialization function
+async function initializeDatabases(): Promise<void> {
+  logger.info('Initializing database connections...');
+  
+  if (databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
+    try {
+      await PrismaClientSingleton.connect();
+      const isHealthy = await RepositoryFactory.checkPostgresHealth();
+      if (isHealthy) {
+        logger.info('PostgreSQL connection established and healthy');
+      } else {
+        logger.warn('PostgreSQL connection established but health check failed');
+      }
+    } catch (error) {
+      logger.error('Failed to connect to PostgreSQL:', error);
+      if (!databaseFeatures.DUAL_DATABASE_MODE) {
+        throw error; // Fail startup if PostgreSQL is the only database
+      }
+    }
+  }
+
+  if (!databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
+    try {
+      const isHealthy = await RepositoryFactory.checkCosmosHealth();
+      if (isHealthy) {
+        logger.info('CosmosDB connection established and healthy');
+      } else {
+        logger.warn('CosmosDB connection established but health check failed');
+      }
+    } catch (error) {
+      logger.error('Failed to connect to CosmosDB:', error);
+      if (!databaseFeatures.DUAL_DATABASE_MODE) {
+        throw error; // Fail startup if CosmosDB is the only database
+      }
+    }
+  }
+
+  // Log database configuration
+  logger.info('Database configuration:', {
+    usePostgreSQL: databaseFeatures.USE_POSTGRESQL,
+    dualDatabaseMode: databaseFeatures.DUAL_DATABASE_MODE,
+    migrationMode: databaseFeatures.MIGRATION_MODE
+  });
+}
 
 // Create data directory if it doesn't exist
 const dataDir = path.join(__dirname, '../data');
@@ -73,24 +121,52 @@ app.use('/api/settings', settingsRoutes); // User settings endpoints
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+// Graceful shutdown handler
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  
+  try {
+    if (databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
+      await PrismaClientSingleton.disconnect();
+    }
+    logger.info('Database connections closed successfully');
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+  }
+  
+  process.exit(0);
+}
+
+// Register signal handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
 if (process.env.NODE_ENV !== 'test') {
-  // Start server
-  app.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV}`);
-  });
+  // Initialize databases and start server
+  initializeDatabases()
+    .then(() => {
+      app.listen(PORT, () => {
+        logger.info(`Server is running on port ${PORT}`);
+        logger.info(`Environment: ${process.env.NODE_ENV}`);
+      });
+    })
+    .catch((error) => {
+      logger.error('Failed to initialize databases:', error);
+      process.exit(1);
+    });
 }
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
   logger.error('Uncaught Exception:', error);
   // Graceful shutdown
-  process.exit(1);
+  gracefulShutdown('uncaughtException');
 });
 
 // Handle unhandled rejections
 process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
   logger.error('Unhandled Promise Rejection:', reason);
+  gracefulShutdown('unhandledRejection');
 });
 
 export default app;

@@ -11,3 +11,9 @@ export const features: Record<Feature, FeatureDetail> = {
   'WEBHOOK': { label: 'Webhook integrations' },
   'ANALYTICS': { label: 'Advanced analytics' },
 };
+
+export const databaseFeatures = {
+  USE_POSTGRESQL: process.env.USE_POSTGRESQL === 'true',
+  DUAL_DATABASE_MODE: process.env.DUAL_DATABASE_MODE === 'true',
+  MIGRATION_MODE: process.env.MIGRATION_MODE === 'true',
+};
