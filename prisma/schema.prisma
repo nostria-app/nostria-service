@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,144 +7,121 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Account model - corresponds to the Account interface
 model Account {
-  id             String   @id // pubkey as primary key
-  pubkey         String   @unique
-  username       String?  @unique
-  tier           String   // 'free', 'premium', 'premium_plus'
-  expires        BigInt?  // Optional expiry timestamp
-  created        BigInt   // Creation timestamp
-  modified       BigInt   // Modification timestamp
-  lastLoginDate  BigInt?  // Last login timestamp
-  
-  // Subscription details stored as JSON
-  subscription   Json     // AccountSubscription object
-  
-  // Relations
-  backupJobs              BackupJob[]
-  notificationLogs        NotificationLog[]
-  notificationSettings    NotificationSettings[]
+  id                        String                     @id
+  pubkey                    String                     @unique
+  username                  String?                    @unique
+  tier                      String
+  expires                   BigInt?
+  created                   BigInt
+  modified                  BigInt
+  lastLoginDate             BigInt?
+  subscription              Json
+  backupJobs                BackupJob[]
+  notificationLogs          NotificationLog[]
+  notificationSettings      NotificationSettings?
   notificationSubscriptions NotificationSubscription[]
-  payments                Payment[]
-  userSettings            UserSettings[]
-  
+  payments                  Payment[]
+  userSettings              UserSettings?
+
   @@map("accounts")
 }
 
-// BackupJob model - corresponds to the BackupJob interface  
 model BackupJob {
-  id           String   @id @default(uuid())
+  id           String  @id @default(uuid())
   pubkey       String
-  status       String   // BackupJobStatus enum
-  backupType   String   // BackupType enum
-  requested    BigInt   // Timestamp when requested
-  scheduled    BigInt?  // Optional scheduled timestamp
-  started      BigInt?  // Optional start timestamp
-  completed    BigInt?  // Optional completion timestamp
+  status       String
+  backupType   String
+  requested    BigInt
+  scheduled    BigInt?
+  started      BigInt?
+  completed    BigInt?
   errorMessage String?
-  resultUrl    String?  // Download URL
-  expires      BigInt?  // Download link expiry
-  metadata     Json?    // Optional metadata object
-  
-  // Relations
-  account      Account  @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
-  @@map("backup_jobs")
+  resultUrl    String?
+  expires      BigInt?
+  metadata     Json?
+  account      Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
+
   @@index([pubkey])
   @@index([status])
+  @@map("backup_jobs")
 }
 
-// NotificationLog model - corresponds to the NotificationLog interface
 model NotificationLog {
-  id        String  @id @default(uuid())
-  pubkey    String
-  title     String?
-  body      String?
-  content   String?
-  template  String?
-  created   BigInt
-  modified  BigInt
-  
-  // Relations
-  account   Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
-  @@map("notification_logs")
-  @@index([pubkey])
-  @@index([created])
-}
-
-// NotificationSettings model - corresponds to the NotificationSettings interface
-model NotificationSettings {
-  id       String  @id // Will be "notification-settings-" + pubkey
-  pubkey   String  @unique
-  enabled  Boolean
-  filters  Json?   // Custom filters for premium users
-  settings Json?   // Additional settings
+  id       String  @id @default(uuid())
+  pubkey   String
+  title    String?
+  body     String?
+  content  String?
+  template String?
   created  BigInt
   modified BigInt
-  
-  // Relations
   account  Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
+
+  @@index([pubkey])
+  @@index([created])
+  @@map("notification_logs")
+}
+
+model NotificationSettings {
+  id       String  @id
+  pubkey   String  @unique
+  enabled  Boolean
+  filters  Json?
+  settings Json?
+  created  BigInt
+  modified BigInt
+  account  Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
+
   @@map("notification_settings")
 }
 
-// NotificationSubscription model - corresponds to the NotificationSubscription interface
 model NotificationSubscription {
-  id           String @id // Combination of pubkey and device key (p256dh)
+  id           String  @id
   pubkey       String
-  subscription Json   // PushSubscription object
-  deviceKey    String // p256dh key used as unique identifier
+  subscription Json
+  deviceKey    String
   created      BigInt
   modified     BigInt
-  
-  // Relations
   account      Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
-  @@map("notification_subscriptions")
-  @@index([pubkey])
+
   @@unique([pubkey, deviceKey])
+  @@index([pubkey])
+  @@map("notification_subscriptions")
 }
 
-// Payment model - corresponds to the Payment interface
 model Payment {
   id           String  @id @default(uuid())
-  paymentType  String  // 'ln' for lightning
+  paymentType  String
   lnHash       String
   lnInvoice    String
   lnAmountSat  Int
-  tier         String  // Tier being purchased
-  billingCycle String  // BillingCycle
+  tier         String
+  billingCycle String
   priceCents   Int
   isPaid       Boolean
-  paid         BigInt? // Payment timestamp
-  expires      BigInt  // Invoice expiry
+  paid         BigInt?
+  expires      BigInt
   pubkey       String
   created      BigInt
   modified     BigInt
-  
-  // Relations
   account      Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
-  @@map("payments")
+
   @@index([pubkey])
   @@index([lnHash])
   @@index([isPaid])
   @@index([expires])
+  @@map("payments")
 }
 
-// UserSettings model - corresponds to the UserSettings interface
 model UserSettings {
-  id             String  @id // Will be "user-settings-" + pubkey  
+  id             String  @id
   pubkey         String  @unique
-  releaseChannel String  // 'stable', 'beta', 'alpha'
+  releaseChannel String
   socialSharing  Boolean
   created        BigInt
   modified       BigInt
-  
-  // Relations
   account        Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
-  
+
   @@map("user_settings")
 }

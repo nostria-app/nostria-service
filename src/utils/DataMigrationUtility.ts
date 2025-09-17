@@ -28,7 +28,9 @@ export class DataMigrationUtility {
   static async migrateAccounts(options: MigrationOptions = {}): Promise<MigrationProgress> {
     const { batchSize = this.DEFAULT_BATCH_SIZE, skipExisting = true, dryRun = false } = options;
     
-    if (!databaseFeatures.MIGRATION_MODE && !dryRun) {
+    // Check migration mode using direct environment variable to avoid module loading timing issues
+    const migrationMode = process.env.MIGRATION_MODE === 'true';
+    if (!migrationMode && !dryRun) {
       throw new Error('Migration mode is not enabled. Set MIGRATION_MODE=true to proceed.');
     }
 
