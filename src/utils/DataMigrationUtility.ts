@@ -123,7 +123,9 @@ export class DataMigrationUtility {
   static async migrateUserBackupJobs(pubkey: string, options: MigrationOptions = {}): Promise<MigrationProgress> {
     const { skipExisting = true, dryRun = false } = options;
     
-    if (!databaseFeatures.MIGRATION_MODE && !dryRun) {
+    // Check migration mode using direct environment variable to avoid module loading timing issues
+    const migrationMode = process.env.MIGRATION_MODE === 'true';
+    if (!migrationMode && !dryRun) {
       throw new Error('Migration mode is not enabled. Set MIGRATION_MODE=true to proceed.');
     }
 
