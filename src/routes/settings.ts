@@ -1,11 +1,14 @@
 import express, { Request, Response } from 'express';
-import userSettingsRepository from '../database/accountSettingsRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import logger from '../utils/logger';
 import { nip98 } from 'nostr-tools';
 import { UserSettingsUpdate, UserSettingsResponse } from '../models/userSettings';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { now } from '../helpers/now';
+
+// Get repository instance from factory
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes

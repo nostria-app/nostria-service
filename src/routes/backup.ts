@@ -4,7 +4,7 @@ import logger from '../utils/logger';
 import { createRateLimit } from '../utils/rateLimit';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
-import backupJobRepository from '../database/backupJobRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import { 
   BackupJob, 
   BackupJobStatus, 
@@ -13,6 +13,9 @@ import {
   BackupJobResponse 
 } from '../models/backupJob';
 import { now } from '../helpers/now';
+
+// Get repository instance from factory
+const backupJobRepository = RepositoryFactory.getBackupJobRepository();
 
 interface ErrorBodyWithMessage extends ErrorBody {
   message: string;

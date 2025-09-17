@@ -5,11 +5,14 @@ import { createRateLimit } from '../utils/rateLimit';
 import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
-import paymentRepository from '../database/paymentRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import config from '../config';
 import { INVOICE_TTL, Payment } from '../models/payment';
 import { now } from '../helpers/now';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
+
+// Get repository instance from factory
+const paymentRepository = RepositoryFactory.getPaymentRepository();
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute

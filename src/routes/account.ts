@@ -7,13 +7,16 @@ import { ErrorBody, NIP98AuthenticatedRequest } from './types';
 import { isPotentiallyPubkey, isValidNpub } from '../utils/nostr';
 import config from '../config';
 import { features } from '../config/features';
-import accountRepository from '../database/accountRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import { Account } from '../models/account';
-import paymentRepository from '../database/paymentRepository';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
 import validateUsername from './account/validateUsername';
+
+// Get repository instances from factory
+const accountRepository = RepositoryFactory.getAccountRepository();
+const paymentRepository = RepositoryFactory.getPaymentRepository();
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -494,7 +497,7 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
       }
 
       // Create or update user account with subscription
-      const tierDetails = config.tiers[payment.tier];
+      const tierDetails = config.tiers[payment.tier as Tier];
 
       subscription = {
         tier: payment.tier,
