@@ -325,3 +325,24 @@ npx prisma migrate reset
 2. **Enhanced Migration Tools**: Add support for incremental syncing
 3. **Performance Optimization**: Add connection pooling and query optimization
 4. **Monitoring**: Add metrics and alerting for database operations
+5. **Incremental Re-runs**: Use new incremental migration script once initial full migration is done
+
+## Incremental Re-run (Post Initial Migration)
+
+If additional data has been written to CosmosDB after your initial migration, you can bring only the new (or previously missing) records across using the incremental script:
+
+```bash
+# Preview (no changes)
+MIGRATION_MODE=true npm run migrate:incremental:dry-run
+
+# All data types (accounts, notification subscriptions, payments, notification settings)
+MIGRATION_MODE=true npm run migrate:incremental
+
+# Specific type only
+MIGRATION_MODE=true npm run migrate:incremental:accounts
+MIGRATION_MODE=true npm run migrate:incremental:notifications
+MIGRATION_MODE=true npm run migrate:incremental:payments
+MIGRATION_MODE=true npm run migrate:incremental:settings
+```
+
+The incremental process relies on the existing `skipExisting` logic so it is safe to re-run multiple times. Use `:dry-run` first in production to confirm scope before applying changes.
