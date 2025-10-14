@@ -1,7 +1,7 @@
 {
-  "name": "nostria-notification",
-  "version": "0.0.1",
-  "description": "Notification Service for Nostria",
+  "name": "nostria-service",
+  "version": "0.0.2",
+  "description": "Backend Service for Nostria",
   "main": "dist/index.js",
   "scripts": {
     "build": "prisma generate && tsc",
@@ -22,19 +22,17 @@
     "migrate:verify": "tsx src/scripts/migrate.ts verify",
     "migrate:full": "tsx src/scripts/migrate.ts full",
     "migrate:dry-run": "tsx src/scripts/migrate.ts dry-run",
-  "migrate:incremental": "tsx src/scripts/migrateIncremental.ts",
-  "migrate:incremental:accounts": "tsx src/scripts/migrateIncremental.ts accounts",
-  "migrate:incremental:notifications": "tsx src/scripts/migrateIncremental.ts notifications",
-  "migrate:incremental:payments": "tsx src/scripts/migrateIncremental.ts payments",
-  "migrate:incremental:settings": "tsx src/scripts/migrateIncremental.ts settings",
-  "migrate:incremental:dry-run": "tsx src/scripts/migrateIncremental.ts dry-run",
+    "migrate:incremental": "tsx src/scripts/migrateIncremental.ts",
+    "migrate:incremental:accounts": "tsx src/scripts/migrateIncremental.ts accounts",
+    "migrate:incremental:notifications": "tsx src/scripts/migrateIncremental.ts notifications",
+    "migrate:incremental:payments": "tsx src/scripts/migrateIncremental.ts payments",
+    "migrate:incremental:settings": "tsx src/scripts/migrateIncremental.ts settings",
+    "migrate:incremental:dry-run": "tsx src/scripts/migrateIncremental.ts dry-run",
     "postinstall": "prisma generate"
   },
   "keywords": [
     "nostria",
-    "notification",
-    "web-push",
-    "VAPID",
+    "service",
     "nostr"
   ],
   "author": "Nostria",
