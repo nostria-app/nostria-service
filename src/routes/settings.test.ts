@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import app from '../index';
-import userSettingsRepository from '../database/accountSettingsRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import { now } from '../helpers/now';
 
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+
 // Mock the repository
-jest.mock('../database/userSettingsRepository');
+jest.mock('../database/RepositoryFactory');
 const mockUserSettingsRepository = userSettingsRepository as jest.Mocked<typeof userSettingsRepository>;
 
 // Mock NIP-98 validation

@@ -38,11 +38,13 @@ import app from '../index';
 import { generateNIP98, NIP98Fixture, testAccount, testPayment, generateKeyPair } from '../helpers/testHelper';
 import { finalizeEvent, nip98 } from 'nostr-tools';
 
-import paymentRepository from '../database/paymentRepository';
-import accountRepository from '../database/accountRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import { DEFAULT_SUBSCRIPTION } from '../models/accountSubscription';
 
 import config from '../config';
+
+const paymentRepository = RepositoryFactory.getPaymentRepository();
+const accountRepository = RepositoryFactory.getAccountRepository();
 import { now } from '../helpers/now';
 import { Account } from '../models/account';
 

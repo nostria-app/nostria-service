@@ -1,5 +1,3 @@
-import { CosmosDbEntity } from "../database/CosmosDbBaseRepository";
-
 export interface PushSubscription {
   endpoint: string;
   keys: {
@@ -9,7 +7,7 @@ export interface PushSubscription {
   userAgent?: string;
 }
 
-export interface NotificationSubscription extends CosmosDbEntity {
+export interface NotificationSubscription {
   id: string; // Will be a combination of pubkey and device key (p256dh)
   type: 'notification-subscription';
   pubkey: string; // Partition key

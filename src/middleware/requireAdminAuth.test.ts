@@ -36,8 +36,9 @@ jest.mock('../routes/notification', () => {
 });
 
 import app from '../index';
-import accountRepository from '../database/accountRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 
+const accountRepository = RepositoryFactory.getAccountRepository();
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
 
 // Helper function to generate NIP-98 token with specific pubkey

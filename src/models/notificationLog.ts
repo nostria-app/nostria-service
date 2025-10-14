@@ -1,6 +1,4 @@
-import { CosmosDbEntity } from "../database/CosmosDbBaseRepository";
-
-export interface NotificationLog extends CosmosDbEntity {
+export interface NotificationLog {
   id: string; // Unique identifier for each notification
   type: 'notification-log';
   pubkey: string; // Partition key

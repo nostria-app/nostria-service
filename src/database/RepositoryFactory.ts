@@ -1,20 +1,9 @@
-import { databaseFeatures } from '../config/features';
-import accountRepository from './accountRepository';
-import backupJobRepository from './backupJobRepository';
-import paymentRepository from './paymentRepository';
-import userSettingsRepository from './accountSettingsRepository';
-import notificationSubscriptionRepository from './notificationSubscriptionRepository';
-import notificationSettingsRepository from './notificationSettingsRepository';
 import PrismaAccountRepository from './PrismaAccountRepository';
 import PrismaBackupJobRepository from './PrismaBackupJobRepository';
 import PrismaPaymentRepository from './PrismaPaymentRepository';
 import PrismaUserSettingsRepository from './PrismaUserSettingsRepository';
 import PrismaNotificationSubscriptionRepository from './PrismaNotificationSubscriptionRepository';
 import PrismaNotificationSettingsRepository from './PrismaNotificationSettingsRepository';
-
-// Import other repositories as they're created
-// import notificationLogRepository from './notificationLogRepository';
-// import PrismaNotificationLogRepository from './PrismaNotificationLogRepository';
 
 export interface IAccountRepository {
   create(account: any): Promise<any>;
@@ -58,9 +47,7 @@ export interface INotificationSubscriptionRepository {
   getSubscriptionByDeviceKey(pubkey: string, deviceKey: string): Promise<any | null>;
   deleteSubscription(pubkey: string, deviceKey: string): Promise<void>;
   getAllSubscriptions(limit?: number): Promise<any[]>;
-  // Note: These methods have different names in different implementations
-  // CosmosDB: getUserSubscriptions, getAllUserPubkeys
-  // Prisma: getSubscriptionsByPubkey, (needs to be added)
+  getSubscriptionsByPubkey(pubkey: string): Promise<any[]>;
 }
 
 export interface INotificationSettingsRepository {
@@ -79,127 +66,48 @@ class RepositoryFactory {
   private static prismaNotificationSettingsRepository?: PrismaNotificationSettingsRepository;
 
   static getAccountRepository(): IAccountRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaAccountRepository) {
-        this.prismaAccountRepository = new PrismaAccountRepository();
-      }
-      return this.prismaAccountRepository;
-    } else {
-      // Return the existing singleton instance
-      return accountRepository;
+    if (!this.prismaAccountRepository) {
+      this.prismaAccountRepository = new PrismaAccountRepository();
     }
+    return this.prismaAccountRepository;
   }
 
   static getBackupJobRepository(): IBackupJobRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaBackupJobRepository) {
-        this.prismaBackupJobRepository = new PrismaBackupJobRepository();
-      }
-      return this.prismaBackupJobRepository;
-    } else {
-      // Return the existing singleton instance
-      return backupJobRepository;
+    if (!this.prismaBackupJobRepository) {
+      this.prismaBackupJobRepository = new PrismaBackupJobRepository();
     }
+    return this.prismaBackupJobRepository;
   }
 
   static getPaymentRepository(): IPaymentRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaPaymentRepository) {
-        this.prismaPaymentRepository = new PrismaPaymentRepository();
-      }
-      return this.prismaPaymentRepository;
-    } else {
-      // Return the existing singleton instance
-      return paymentRepository;
+    if (!this.prismaPaymentRepository) {
+      this.prismaPaymentRepository = new PrismaPaymentRepository();
     }
+    return this.prismaPaymentRepository;
   }
 
   static getUserSettingsRepository(): IUserSettingsRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaUserSettingsRepository) {
-        this.prismaUserSettingsRepository = new PrismaUserSettingsRepository();
-      }
-      return this.prismaUserSettingsRepository;
-    } else {
-      // Return the existing singleton instance
-      return userSettingsRepository;
+    if (!this.prismaUserSettingsRepository) {
+      this.prismaUserSettingsRepository = new PrismaUserSettingsRepository();
     }
+    return this.prismaUserSettingsRepository;
   }
 
   static getNotificationSubscriptionRepository(): INotificationSubscriptionRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaNotificationSubscriptionRepository) {
-        this.prismaNotificationSubscriptionRepository = new PrismaNotificationSubscriptionRepository();
-      }
-      return this.prismaNotificationSubscriptionRepository;
-    } else {
-      // Return the existing singleton instance
-      return notificationSubscriptionRepository;
+    if (!this.prismaNotificationSubscriptionRepository) {
+      this.prismaNotificationSubscriptionRepository = new PrismaNotificationSubscriptionRepository();
     }
+    return this.prismaNotificationSubscriptionRepository;
   }
 
   static getNotificationSettingsRepository(): INotificationSettingsRepository {
-    if (databaseFeatures.USE_POSTGRESQL) {
-      if (!this.prismaNotificationSettingsRepository) {
-        this.prismaNotificationSettingsRepository = new PrismaNotificationSettingsRepository();
-      }
-      return this.prismaNotificationSettingsRepository;
-    } else {
-      // Return the existing singleton instance
-      return notificationSettingsRepository;
+    if (!this.prismaNotificationSettingsRepository) {
+      this.prismaNotificationSettingsRepository = new PrismaNotificationSettingsRepository();
     }
+    return this.prismaNotificationSettingsRepository;
   }
 
-  // Dual database mode support for gradual migration
-  static async migrateAccountFromCosmosToPostgres(pubkey: string): Promise<void> {
-    if (!databaseFeatures.MIGRATION_MODE) {
-      throw new Error('Migration mode is not enabled');
-    }
-
-    const cosmosRepo = accountRepository;
-    const postgresRepo = new PrismaAccountRepository();
-
-    const account = await cosmosRepo.getByPubkey(pubkey);
-    if (account) {
-      try {
-        await postgresRepo.create(account);
-      } catch (error) {
-        // Account might already exist, try update
-        await postgresRepo.update(account);
-      }
-    }
-  }
-
-  static async migrateBackupJobFromCosmosToPostgres(id: string, pubkey: string): Promise<void> {
-    if (!databaseFeatures.MIGRATION_MODE) {
-      throw new Error('Migration mode is not enabled');
-    }
-
-    const cosmosRepo = backupJobRepository;
-    const postgresRepo = new PrismaBackupJobRepository();
-
-    const backupJob = await cosmosRepo.getBackupJob(id, pubkey);
-    if (backupJob) {
-      try {
-        await postgresRepo.createBackupJob(backupJob);
-      } catch (error) {
-        // Backup job might already exist, try update with status
-        await postgresRepo.updateBackupJobStatus(id, pubkey, backupJob.status, backupJob);
-      }
-    }
-  }
-
-  // Health check methods
-  static async checkCosmosHealth(): Promise<boolean> {
-    try {
-      // Try a simple query to check if CosmosDB is accessible
-      await accountRepository.getAllAccounts(1);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
+  // Health check method
   static async checkPostgresHealth(): Promise<boolean> {
     try {
       const { prisma } = await import('./prismaClient');

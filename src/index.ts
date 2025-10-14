@@ -8,7 +8,6 @@ import path from 'path';
 import fs from 'fs';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
-import { databaseFeatures } from './config/features';
 import PrismaClientSingleton from './database/prismaClient';
 import RepositoryFactory from './database/RepositoryFactory';
 
@@ -31,47 +30,20 @@ import logger from './utils/logger';
 
 // Database initialization function
 async function initializeDatabases(): Promise<void> {
-  logger.info('Initializing database connections...');
+  logger.info('Initializing PostgreSQL database connection...');
   
-  if (databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
-    try {
-      await PrismaClientSingleton.connect();
-      const isHealthy = await RepositoryFactory.checkPostgresHealth();
-      if (isHealthy) {
-        logger.info('PostgreSQL connection established and healthy');
-      } else {
-        logger.warn('PostgreSQL connection established but health check failed');
-      }
-    } catch (error) {
-      logger.error('Failed to connect to PostgreSQL:', error);
-      if (!databaseFeatures.DUAL_DATABASE_MODE) {
-        throw error; // Fail startup if PostgreSQL is the only database
-      }
+  try {
+    await PrismaClientSingleton.connect();
+    const isHealthy = await RepositoryFactory.checkPostgresHealth();
+    if (isHealthy) {
+      logger.info('PostgreSQL connection established and healthy');
+    } else {
+      logger.warn('PostgreSQL connection established but health check failed');
     }
+  } catch (error) {
+    logger.error('Failed to connect to PostgreSQL:', error);
+    throw error; // Fail startup if PostgreSQL connection fails
   }
-
-  if (!databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
-    try {
-      const isHealthy = await RepositoryFactory.checkCosmosHealth();
-      if (isHealthy) {
-        logger.info('CosmosDB connection established and healthy');
-      } else {
-        logger.warn('CosmosDB connection established but health check failed');
-      }
-    } catch (error) {
-      logger.error('Failed to connect to CosmosDB:', error);
-      if (!databaseFeatures.DUAL_DATABASE_MODE) {
-        throw error; // Fail startup if CosmosDB is the only database
-      }
-    }
-  }
-
-  // Log database configuration
-  logger.info('Database configuration:', {
-    usePostgreSQL: databaseFeatures.USE_POSTGRESQL,
-    dualDatabaseMode: databaseFeatures.DUAL_DATABASE_MODE,
-    migrationMode: databaseFeatures.MIGRATION_MODE
-  });
 }
 
 // Create data directory if it doesn't exist
@@ -128,9 +100,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
   
   try {
-    if (databaseFeatures.USE_POSTGRESQL || databaseFeatures.DUAL_DATABASE_MODE) {
-      await PrismaClientSingleton.disconnect();
-    }
+    await PrismaClientSingleton.disconnect();
     logger.info('Database connections closed successfully');
   } catch (error) {
     logger.error('Error during graceful shutdown:', error);

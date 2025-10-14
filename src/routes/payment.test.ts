@@ -61,8 +61,10 @@ jest.mock('../config', () => ({
 }));
 
 import app from '../index';
-import paymentRepository from '../database/paymentRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import lightningService from '../services/LightningService';
+
+const paymentRepository = RepositoryFactory.getPaymentRepository();
 
 // Mock uuid
 jest.mock('uuid', () => ({

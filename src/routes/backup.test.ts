@@ -21,7 +21,9 @@ jest.mock('../utils/logger', () => ({
   debug: jest.fn()
 }));
 
-import backupJobRepository from '../database/backupJobRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
+
+const backupJobRepository = RepositoryFactory.getBackupJobRepository();
 
 describe('Backup API Routes', () => {
   const mockBackupJobRepository = backupJobRepository as jest.Mocked<typeof backupJobRepository>;
