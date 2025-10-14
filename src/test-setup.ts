@@ -7,4 +7,4 @@ process.env.AZURE_COSMOSDB_CONTAINER_NAME = 'Documents';
 process.env.PUBLIC_VAPID_KEY = 'BM1L1YgTXwlCqTKkqMtlXKWNbztKc1FEt4P8-HvjM1lNgJTY8AwX9R-9S1Cxd8bYtqI7vZ2pHXnGjGVUaWwLBBQ';
 process.env.PRIVATE_VAPID_KEY = 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEF';
 process.env.VAPID_SUBJECT = 'mailto:test@example.com';
-process.env.NOTIFICATION_API_KEY = 'test-api-key';
+process.env.SERVICE_API_KEY = 'test-api-key';

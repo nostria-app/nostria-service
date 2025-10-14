@@ -27,6 +27,12 @@ const options: swaggerJsdoc.Options = {
           name: 'Authorization',
           description: 'NIP-98 authentication token',
         },
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-api-key',
+          description: 'Service API key for protected endpoints',
+        },
       },
     },
   },
