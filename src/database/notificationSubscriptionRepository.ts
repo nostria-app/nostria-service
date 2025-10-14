@@ -70,6 +70,7 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
 
   async getAllUserPubkeys(): Promise<string[]> {
     try {
+      logger.info('[NotificationSubscriptionRepository] Querying for all user pubkeys with type: notification-subscription');
       const query = {
         query: 'SELECT DISTINCT c.pubkey FROM c WHERE c.type = @type',
         parameters: [
@@ -78,9 +79,15 @@ class NotificationSubscriptionRepository extends CosmosDbBaseRepository<Notifica
       };
 
       const results = await this.query(query);
+      logger.info(`[NotificationSubscriptionRepository] Query returned ${results.length} distinct pubkeys`);
+      
+      if (results.length > 0) {
+        logger.debug(`[NotificationSubscriptionRepository] First few pubkeys: ${results.slice(0, 3).map(r => r.pubkey).join(', ')}`);
+      }
+      
       return results.map(r => r.pubkey);
     } catch (error) {
-      logger.error('Failed to get all user pubkeys:', error);
+      logger.error('[NotificationSubscriptionRepository] Failed to get all user pubkeys:', error);
       throw new Error(`Failed to get all user pubkeys: ${(error as Error).message}`);
     }
   }

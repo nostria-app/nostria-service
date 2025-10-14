@@ -1,7 +1,5 @@
 import express, { Request, Response } from 'express';
-import notificationService from '../database/notificationService';
-import notificationSettingsRepository from '../database/notificationSettingsRepository';
-import notificationSubscriptionRepository from '../database/notificationSubscriptionRepository';
+import RepositoryFactory from '../database/RepositoryFactory';
 import logger from '../utils/logger';
 
 const router = express.Router();
@@ -56,7 +54,7 @@ const router = express.Router();
 
 /**
  * @openapi
- * /api/users:
+ * /users:
  *   get:
  *     summary: Get users who should receive notifications with their notification settings
  *     description: Returns a list of users who have notification subscriptions and their notification settings. Protected with API key authentication.
@@ -112,12 +110,19 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 1000);
     const enabledOnly = req.query.enabledOnly === 'true';
 
-    logger.info(`Fetching users with notification settings (limit: ${limit}, enabledOnly: ${enabledOnly})`);
+    logger.info(`[Users API] Starting request - limit: ${limit}, enabledOnly: ${enabledOnly}`);
+
+    // Get repositories based on configuration (CosmosDB or PostgreSQL)
+    const notificationSubscriptionRepository = RepositoryFactory.getNotificationSubscriptionRepository();
+    const notificationSettingsRepository = RepositoryFactory.getNotificationSettingsRepository();
 
     // Get all users who have notification subscriptions
-    const userPubkeys = await notificationSubscriptionRepository.getAllUserPubkeys();
+    logger.info('[Users API] Fetching all user pubkeys from notification subscriptions...');
+    const userPubkeys = await (notificationSubscriptionRepository as any).getAllUserPubkeys();
+    logger.info(`[Users API] Found ${userPubkeys.length} users with notification subscriptions`);
     
     if (userPubkeys.length === 0) {
+      logger.warn('[Users API] No users found with notification subscriptions, returning empty result');
       res.json({
         users: [],
         total: 0,
@@ -126,15 +131,21 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    logger.info(`[Users API] Processing first ${Math.min(userPubkeys.length, limit)} users`);
+
     // Get notification settings for each user and their subscription counts
     const usersWithSettings = await Promise.all(
-      userPubkeys.slice(0, limit).map(async (pubkey) => {
+      userPubkeys.slice(0, limit).map(async (pubkey: string, index: number) => {
         try {
+          logger.debug(`[Users API] Processing user ${index + 1}/${Math.min(userPubkeys.length, limit)}: ${pubkey}`);
+          
           // Get notification settings (might be null if user never explicitly set them)
           const settings = await notificationSettingsRepository.getSettings(pubkey);
+          logger.debug(`[Users API] Settings for ${pubkey}: ${settings ? 'found' : 'not found (using defaults)'}`);
           
           // Get subscription count for this user
-          const subscriptions = await notificationSubscriptionRepository.getUserSubscriptions(pubkey);
+          const subscriptions = await (notificationSubscriptionRepository as any).getUserSubscriptions(pubkey);
+          logger.debug(`[Users API] User ${pubkey} has ${subscriptions.length} subscription(s)`);
           
           // Default settings if user hasn't set any
           const userSettings = {
@@ -149,12 +160,13 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
           // Filter out disabled users if enabledOnly is true
           if (enabledOnly && !userSettings.enabled) {
+            logger.debug(`[Users API] User ${pubkey} filtered out (enabledOnly=true, enabled=false)`);
             return null;
           }
 
           return userSettings;
         } catch (error) {
-          logger.error(`Failed to get settings for user ${pubkey}:`, error);
+          logger.error(`[Users API] Failed to get settings for user ${pubkey}:`, error);
           // Return user with default settings if we can't fetch their specific settings
           return {
             pubkey,
@@ -170,7 +182,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     );
 
     // Filter out null entries (disabled users when enabledOnly is true)
-    const filteredUsers = usersWithSettings.filter(user => user !== null);
+    const filteredUsers = usersWithSettings.filter((user: any) => user !== null);
+    logger.info(`[Users API] After filtering: ${filteredUsers.length} users (filtered out: ${usersWithSettings.length - filteredUsers.length})`);
 
     const response = {
       users: filteredUsers,
@@ -178,11 +191,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       hasMore: userPubkeys.length > limit
     };
 
-    logger.info(`Retrieved ${filteredUsers.length} users with notification settings`);
+    logger.info(`[Users API] Successfully retrieved ${filteredUsers.length} users with notification settings`);
     res.json(response);
 
   } catch (error) {
-    logger.error('Failed to fetch users with notification settings:', error);
+    logger.error('[Users API] Failed to fetch users with notification settings:', error);
     res.status(500).json({ 
       error: 'Failed to fetch users',
       details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined

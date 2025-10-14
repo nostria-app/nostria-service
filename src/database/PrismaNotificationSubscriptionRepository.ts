@@ -150,6 +150,37 @@ class PrismaNotificationSubscriptionRepository extends PrismaBaseRepository {
       throw new Error(`Failed to get notification subscriptions: ${(error as Error).message}`);
     }
   }
+
+  async getAllUserPubkeys(): Promise<string[]> {
+    try {
+      logger.info('[PrismaNotificationSubscriptionRepository] Querying for all distinct user pubkeys');
+      const results = await this.prisma.notificationSubscription.findMany({
+        select: { pubkey: true },
+        distinct: ['pubkey']
+      });
+      
+      const pubkeys = results.map(r => r.pubkey);
+      logger.info(`[PrismaNotificationSubscriptionRepository] Query returned ${pubkeys.length} distinct pubkeys`);
+      
+      if (pubkeys.length > 0) {
+        logger.debug(`[PrismaNotificationSubscriptionRepository] First few pubkeys: ${pubkeys.slice(0, 3).join(', ')}`);
+      }
+      
+      return pubkeys;
+    } catch (error) {
+      logger.error('[PrismaNotificationSubscriptionRepository] Failed to get all user pubkeys:', error);
+      throw new Error(`Failed to get all user pubkeys: ${(error as Error).message}`);
+    }
+  }
+
+  async getUserSubscriptions(pubkey: string): Promise<NotificationSubscription[]> {
+    try {
+      return await this.getSubscriptionsByPubkey(pubkey);
+    } catch (error) {
+      logger.error('Failed to get user subscriptions:', error);
+      throw new Error(`Failed to get user subscriptions: ${(error as Error).message}`);
+    }
+  }
 }
 
 export default PrismaNotificationSubscriptionRepository;
