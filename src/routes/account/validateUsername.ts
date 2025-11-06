@@ -18,6 +18,11 @@ export default (username?: string): string | null => {
     return 'This username is reserved'
   }
   
+  // Reject usernames containing "nostria"
+  if (cleanUsername.includes('nostria')) {
+    return 'Username cannot contain "nostria"';
+  }
+  
   // Add additional validation rules here if needed
   // For example, only allow alphanumeric characters and underscores
   if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
