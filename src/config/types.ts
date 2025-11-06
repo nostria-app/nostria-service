@@ -32,4 +32,7 @@ export type Config = {
   admin: {
     pubkeys: string[];
   };
+  nostrZap?: {
+    relays: string[];
+  };
 }

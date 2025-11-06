@@ -78,6 +78,17 @@ const config: Config = {
         features: PremiumPlusFeatures,
       }
     }
+  },
+  nostrZap: {
+    relays: process.env.NOSTR_ZAP_RELAYS 
+      ? process.env.NOSTR_ZAP_RELAYS.split(',').map(r => r.trim())
+      : [
+          'wss://ribo.eu.nostria.app',
+          'wss://ribo.af.nostria.app',
+          'wss://ribo.us.nostria.app',
+          'wss://relay.damus.io',
+          'wss://relay.primal.net'
+        ]
   }
 };
 

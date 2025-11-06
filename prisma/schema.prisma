@@ -117,3 +117,22 @@ model UserSettings {
 
   @@map("user_settings")
 }
+
+model ProcessedZapEvent {
+  id              String  @id
+  eventId         String  @unique
+  recipientPubkey String
+  giftedBy        String
+  tier            String
+  months          Int
+  amountSats      Int
+  status          String  // 'success', 'underpaid', 'failed'
+  errorMessage    String?
+  processed       BigInt
+  created         BigInt
+
+  @@index([eventId])
+  @@index([recipientPubkey])
+  @@index([status])
+  @@map("processed_zap_events")
+}

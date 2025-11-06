@@ -28,6 +28,12 @@ import { apiKeyAuth } from './middleware/auth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import logger from './utils/logger';
 
+// Import services
+import NostrZapService from './services/NostrZapService';
+
+// Initialize Nostr Zap Service
+const nostrZapService = new NostrZapService();
+
 // Database initialization function
 async function initializeDatabases(): Promise<void> {
   logger.info('Initializing PostgreSQL database connection...');
@@ -100,6 +106,9 @@ async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
   
   try {
+    // Stop Nostr Zap Service
+    nostrZapService.stop();
+    
     await PrismaClientSingleton.disconnect();
     logger.info('Database connections closed successfully');
   } catch (error) {
@@ -117,6 +126,12 @@ if (process.env.NODE_ENV !== 'test') {
   // Initialize databases and start server
   initializeDatabases()
     .then(() => {
+      // Start Nostr Zap Service
+      nostrZapService.start().catch((error) => {
+        logger.error('Failed to start Nostr Zap Service:', error);
+        // Continue even if zap service fails - it's not critical for core functionality
+      });
+
       app.listen(PORT, () => {
         logger.info(`Server is running on port ${PORT}`);
         logger.info(`Environment: ${process.env.NODE_ENV}`);

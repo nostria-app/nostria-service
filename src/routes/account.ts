@@ -888,6 +888,24 @@ router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountRe
       return res.status(404).json({ error: 'Account not found' });
     }
 
+    // Validate username if provided
+    if (username !== undefined && username !== null) {
+      const trimmedUsername = username.trim();
+      
+      if (trimmedUsername) {
+        const usernameError = validateUsername(trimmedUsername);
+        if (usernameError) {
+          return res.status(400).json({ error: usernameError });
+        }
+        
+        // Check if username is taken by someone else
+        const existingAccountByUsername = await accountRepository.getByUsername(trimmedUsername);
+        if (existingAccountByUsername && existingAccountByUsername.pubkey !== pubkey) {
+          return res.status(409).json({ error: 'Username is already taken' });
+        }
+      }
+    }
+
     try {
       // Update account with new data
       const updatedAccount = await accountRepository.update({
