@@ -1,4 +1,4 @@
-import { SimplePool, Filter, Event } from 'nostr-tools';
+import { SimplePool, Filter, Event, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
 import config from '../config';
 import { Tier } from '../config/types';
 import RepositoryFactory from '../database/RepositoryFactory';
@@ -246,6 +246,15 @@ class NostrZapService {
           contentDetails.months,
           amountSats,
           'success'
+        );
+
+        // Post notification to Nostr
+        await this.postGiftNotification(
+          contentDetails.recipientPubkey,
+          contentDetails.subscriptionType,
+          contentDetails.months,
+          zapRequest.pubkey,
+          zapRequest
         );
 
         logger.info(
@@ -528,6 +537,111 @@ class NostrZapService {
     } catch (error) {
       logger.error(`Error marking event ${eventId} as processed:`, error);
       // Don't throw - this is not critical
+    }
+  }
+
+  /**
+   * Post a kind 1 notification event to Nostr when a gift subscription is activated
+   */
+  private async postGiftNotification(
+    recipientPubkey: string,
+    subscriptionType: 'premium' | 'premium-plus',
+    months: number,
+    giftedBy: string,
+    zapRequest: ParsedZapRequest
+  ): Promise<void> {
+    try {
+      const privateKey = config.nostrZap?.notificationPrivateKey;
+      
+      if (!privateKey) {
+        logger.warn('NOSTR_PREMIUM_NOTIFICATION_PRIVATE_KEY not configured, skipping notification post');
+        return;
+      }
+
+      // Decode private key if it's in nsec format
+      let privateKeyBytes: Uint8Array;
+      if (privateKey.startsWith('nsec')) {
+        const decoded = nip19.decode(privateKey);
+        if (decoded.type !== 'nsec') {
+          throw new Error('Invalid nsec format');
+        }
+        privateKeyBytes = decoded.data;
+      } else {
+        // Assume it's hex
+        privateKeyBytes = new Uint8Array(
+          privateKey.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16))
+        );
+      }
+
+      const publicKey = getPublicKey(privateKeyBytes);
+      
+      // Extract relays from the zap request
+      const relaysTag = zapRequest.tags.find(tag => tag[0] === 'relays');
+      const zapRequestRelays = relaysTag ? relaysTag.slice(1) : [];
+      
+      // Combine zap request relays with Nostria relays
+      const nostriaRelays = [
+        'wss://ribo.eu.nostria.app',
+        'wss://ribo.af.nostria.app',
+        'wss://ribo.us.nostria.app'
+      ];
+      
+      // Deduplicate relays
+      const allRelays = [...new Set([...zapRequestRelays, ...nostriaRelays])];
+      
+      logger.info(`Publishing gift notification to ${allRelays.length} relays: ${allRelays.join(', ')}`);
+      
+      // Format the gifted by pubkey for display
+      const npubGiftedBy = nip19.npubEncode(giftedBy);
+      const nostrLinkFrom = `nostr:${npubGiftedBy}`;
+
+      const npubGiftedTo = nip19.npubEncode(recipientPubkey);
+      const nostrLinkTo = `nostr:${npubGiftedTo}`;
+
+      // Create the notification content
+      const tierName = subscriptionType === 'premium' ? 'Premium' : 'Premium+';
+      const duration = months === 1 ? '1 month' : `${months} months`;
+
+      const content = `🎁 Congratulations ${nostrLinkTo} ! You've received a Nostria ${tierName} subscription as a gift!
+
+Duration: ${duration}
+Gifted by: ${nostrLinkFrom}
+
+Your premium subscription is now active! As a premium member, you can claim your unique username.
+
+👉 Set up your username here: https://nostria.app/premium
+
+Enjoy your premium features! 🚀`;
+
+      // Create the event
+      const unsignedEvent = {
+        kind: 1,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['p', recipientPubkey], // Tag the recipient
+          ['p', giftedBy], // Tag the gifter
+        ],
+        content,
+        pubkey: publicKey,
+      };
+
+      // Sign and finalize the event
+      const signedEvent = finalizeEvent(unsignedEvent, privateKeyBytes);
+
+      // Publish to all relays
+      const publishPromises = allRelays.map(relay => 
+        this.pool.publish([relay], signedEvent)
+      );
+
+      await Promise.allSettled(publishPromises);
+      
+      logger.info(
+        `Posted gift notification to Nostr for ${recipientPubkey} ` +
+        `(event ${signedEvent.id}) to ${allRelays.length} relays`
+      );
+    } catch (error) {
+      logger.error('Failed to post gift notification to Nostr:', error);
+      // Don't throw - notification failure shouldn't break the subscription activation
     }
   }
 }

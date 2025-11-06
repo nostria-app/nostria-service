@@ -88,7 +88,8 @@ const config: Config = {
           'wss://ribo.us.nostria.app',
           'wss://relay.damus.io',
           'wss://relay.primal.net'
-        ]
+        ],
+    notificationPrivateKey: process.env.NOSTR_PREMIUM_NOTIFICATION_PRIVATE_KEY
   }
 };
 

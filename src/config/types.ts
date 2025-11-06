@@ -34,5 +34,6 @@ export type Config = {
   };
   nostrZap?: {
     relays: string[];
+    notificationPrivateKey?: string; // Private key for "Nostria Premium" account to post notifications
   };
 }
