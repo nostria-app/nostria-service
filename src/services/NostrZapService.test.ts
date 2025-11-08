@@ -125,7 +125,7 @@ Line 3`;
       // So 1 sat = 10,000,000 / 100,000,000 cents = 0.1 cents
       // 1000 cents / 0.1 = 10,000 sats
       const result = await (service as any).validatePaymentAmount('premium', 1, 10000);
-      expect(result).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('should validate correct premium_plus monthly payment with real BTC price', async () => {
@@ -134,7 +134,7 @@ Line 3`;
       
       // 1 month premium_plus = $25 = 2500 cents = 25,000 sats
       const result = await (service as any).validatePaymentAmount('premium-plus', 1, 25000);
-      expect(result).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('should validate multiple months', async () => {
@@ -143,7 +143,7 @@ Line 3`;
       
       // 3 months premium = $30 = 3000 cents = 30,000 sats
       const result = await (service as any).validatePaymentAmount('premium', 3, 30000);
-      expect(result).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('should accept payment within 10% tolerance', async () => {
@@ -153,7 +153,7 @@ Line 3`;
       // 1 month premium = $10 = 10,000 sats
       // 90% of 10,000 = 9,000 sats (minimum acceptable)
       const result = await (service as any).validatePaymentAmount('premium', 1, 9500);
-      expect(result).toBe(true);
+      expect(result.isValid).toBe(true);
     });
 
     it('should reject payment below tolerance', async () => {
@@ -163,7 +163,8 @@ Line 3`;
       // 1 month premium = $10 = 10,000 sats
       // Below 90% tolerance
       const result = await (service as any).validatePaymentAmount('premium', 1, 8000);
-      expect(result).toBe(false);
+      expect(result.isValid).toBe(false);
+      expect(result.message).toBeDefined();
     });
 
     it('should adjust for different BTC prices', async () => {
@@ -174,7 +175,7 @@ Line 3`;
       // At $50k/BTC: 1 sat = 0.05 cents
       // 1000 cents / 0.05 = 20,000 sats
       const result = await (service as any).validatePaymentAmount('premium', 1, 20000);
-      expect(result).toBe(true);
+      expect(result.isValid).toBe(true);
     });
   });
 });

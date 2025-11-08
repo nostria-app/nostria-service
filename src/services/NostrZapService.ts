@@ -628,16 +628,29 @@ Enjoy your premium features! 🚀`;
       // Sign and finalize the event
       const signedEvent = finalizeEvent(unsignedEvent, privateKeyBytes);
 
-      // Publish to all relays
-      const publishPromises = allRelays.map(relay => 
-        this.pool.publish([relay], signedEvent)
+      // Publish to all relays with error handling
+      // Note: pool.publish returns an array of promises when given multiple relays
+      const publishPromises = this.pool.publish(allRelays, signedEvent);
+      
+      // Add error handling to each promise to prevent unhandled rejections
+      const wrappedPromises = publishPromises.map((promise, index) => 
+        promise.catch((error: Error) => {
+          const relay = allRelays[index];
+          logger.warn(`Failed to publish to relay ${relay}: ${error.message}`);
+          return null; // Return null to indicate failure
+        })
       );
 
-      await Promise.allSettled(publishPromises);
+      const results = await Promise.allSettled(wrappedPromises);
+      
+      // Count successful publishes
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+      const failCount = results.length - successCount;
       
       logger.info(
         `Posted gift notification to Nostr for ${recipientPubkey} ` +
-        `(event ${signedEvent.id}) to ${allRelays.length} relays`
+        `(event ${signedEvent.id}) to ${allRelays.length} relays ` +
+        `(${successCount} succeeded, ${failCount} failed)`
       );
     } catch (error) {
       logger.error('Failed to post gift notification to Nostr:', error);

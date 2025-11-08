@@ -153,7 +153,11 @@ process.on('uncaughtException', (error: Error) => {
 // Handle unhandled rejections
 process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
   logger.error('Unhandled Promise Rejection:', reason);
-  gracefulShutdown('unhandledRejection');
+  // Log the error but don't exit - many rejections are non-critical (like publish timeouts)
+  // Only exit on truly critical errors
+  if (reason instanceof Error && reason.message.includes('FATAL')) {
+    gracefulShutdown('unhandledRejection');
+  }
 });
 
 export default app;
