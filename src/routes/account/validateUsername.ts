@@ -9,8 +9,8 @@ export default (username?: string): string | null => {
   const cleanUsername = username.toLowerCase().trim();
   
   // Check if username is too short
-  if (cleanUsername.length < 3) {
-    return 'Username must be at least 3 characters';
+  if (cleanUsername.length < 2) {
+    return 'Username must be at least 2 characters';
   }
   
   // Check against reserved paths

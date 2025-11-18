@@ -108,7 +108,7 @@ Expected zap request content format:
 ### 5. Username Setting
 - Users can set username later via existing account update endpoint
 - Validation ensures username meets requirements:
-  - Minimum 3 characters
+  - Minimum 2 characters
   - Alphanumeric and underscore only
   - Not reserved
   - Not already taken by another user
