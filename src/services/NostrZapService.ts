@@ -8,6 +8,8 @@ import { now } from '../helpers/now';
 import logger from '../utils/logger';
 import lightningService from './LightningService';
 import PrismaClientSingleton from '../database/prismaClient';
+import notificationService from '../database/notificationService';
+import webPush from '../utils/webPush';
 
 const NOSTRIA_PREMIUM_PUBKEY = '3e5b8d197f4a9279278fd61d9d033058e13d62f6652e3f868dcab54fac8c9658';
 
@@ -72,9 +74,29 @@ class NostrZapService {
       logger.warn('Will retry fetching BTC price on each event');
     }
 
+    // Get all user pubkeys to listen for zaps
+    let userPubkeys: string[] = [];
+    try {
+      userPubkeys = await notificationService.getAllUserPubkeys();
+      logger.info(`Found ${userPubkeys.length} users to listen for zaps`);
+    } catch (error) {
+      logger.error('Failed to fetch user pubkeys:', error);
+    }
+
+    // Combine premium pubkey with user pubkeys
+    // We limit the number of pubkeys to avoid overwhelming the filter if there are too many
+    // In a production environment with many users, this would need a different architecture
+    const pubkeysToListen = [NOSTRIA_PREMIUM_PUBKEY, ...userPubkeys];
+    
+    // If there are too many pubkeys, we might need to split subscriptions or use a wildcard if supported/appropriate
+    // For now, we'll just log a warning if it's very large
+    if (pubkeysToListen.length > 1000) {
+      logger.warn(`Listening for ${pubkeysToListen.length} pubkeys, this might be too large for some relays`);
+    }
+
     const filter: Filter = {
       kinds: [9735], // Zap receipt events
-      '#p': [NOSTRIA_PREMIUM_PUBKEY], // Only zaps sent to Nostria Premium pubkey
+      '#p': pubkeysToListen, // Listen for zaps to premium pubkey AND our users
       // No 'since' filter - process all historical events
     };
 
@@ -175,6 +197,25 @@ class NostrZapService {
         return;
       }
 
+      // Check if this is a gift subscription (recipient is NOSTRIA_PREMIUM_PUBKEY)
+      const pTags = event.tags.filter(tag => tag[0] === 'p');
+      const isGiftSubscription = pTags.some(tag => tag[1] === NOSTRIA_PREMIUM_PUBKEY);
+
+      if (isGiftSubscription) {
+        await this.handleGiftSubscription(event, zapRequest);
+      } else {
+        await this.handleUserZapNotification(event, zapRequest);
+      }
+
+    } catch (error) {
+      logger.error(`Error processing zap event ${event.id}:`, error);
+    }
+  }
+
+  /**
+   * Handle a zap that is a gift subscription
+   */
+  private async handleGiftSubscription(event: Event, zapRequest: ParsedZapRequest): Promise<void> {
       // Parse the content to extract subscription details
       const contentDetails = this.parseZapContent(zapRequest.content);
       if (!contentDetails) {
@@ -276,9 +317,101 @@ class NostrZapService {
         
         logger.error(`Failed to activate subscription for zap ${event.id}:`, error);
       }
+  }
+
+  /**
+   * Handle a normal zap to a user (send push notification)
+   */
+  private async handleUserZapNotification(event: Event, zapRequest: ParsedZapRequest): Promise<void> {
+    try {
+      // Identify the recipient
+      // The 'p' tag in the zap receipt (event) is the recipient
+      const pTag = event.tags.find(tag => tag[0] === 'p');
+      if (!pTag) {
+        logger.warn(`Zap event ${event.id} missing p tag`);
+        return;
+      }
+      const recipientPubkey = pTag[1];
+
+      // Check if we have subscriptions for this user
+      const subscriptions = await notificationService.getUserSubscriptions(recipientPubkey);
+      if (subscriptions.length === 0) {
+        logger.debug(`No push subscriptions for recipient ${recipientPubkey}, skipping notification`);
+        return;
+      }
+
+      // Extract amount
+      const amountTag = zapRequest.tags.find(tag => tag[0] === 'amount');
+      let amountSats = 0;
+      if (amountTag) {
+        const amountMillisats = parseInt(amountTag[1], 10);
+        if (!isNaN(amountMillisats)) {
+          amountSats = Math.floor(amountMillisats / 1000);
+        }
+      }
+
+      // Determine the link
+      // 1. Link to the event that user received zaps for (e tag in zap request)
+      // 2. If no reference to the event, link to the profile of the user who sent the zap (P tag in receipt)
+      // 3. If no P tag, simply open the user's own profile
+
+      let link = `nostr:${recipientPubkey}`; // Default to own profile
+      
+      const eTag = zapRequest.tags.find(tag => tag[0] === 'e');
+      // Check P tag in the receipt event (not the request)
+      const PTag = event.tags.find(tag => tag[0] === 'P');
+      const senderPubkey = zapRequest.pubkey;
+
+      if (eTag) {
+        link = `nostr:${eTag[1]}`;
+      } else if (PTag) {
+        link = `nostr:${PTag[1]}`;
+      }
+
+      // Construct notification payload
+      const title = 'Zap Received! ⚡';
+      const body = `You received ${amountSats} sats${PTag ? ' from a fan' : ''}!`;
+
+      // Send to all user devices
+      const promises = subscriptions.map(async (sub) => {
+        try {
+          const pushSubscription = JSON.parse(sub.subscription);
+          await webPush.sendNotification(pushSubscription, {
+            title,
+            body,
+            url: link,
+            data: {
+              type: 'zap',
+              amount: amountSats,
+              sender: senderPubkey,
+              eventId: event.id
+            }
+          });
+        } catch (err) {
+          logger.error(`Failed to send push notification to device ${sub.rowKey}:`, err);
+        }
+      });
+
+      await Promise.all(promises);
+      logger.info(`Sent zap notifications to ${subscriptions.length} devices for user ${recipientPubkey}`);
+
+      // We don't need to mark these as processed in the database as strictly as gift subscriptions
+      // but we could if we wanted to avoid duplicate notifications on restart.
+      // For now, we rely on the in-memory check or maybe we should add a simple record.
+      // Since isEventProcessed checks the DB, we should probably save it.
+      
+      await this.markEventProcessed(
+        event.id,
+        recipientPubkey,
+        senderPubkey,
+        'zap', // Use 'zap' as tier for generic zaps
+        0,
+        amountSats,
+        'success'
+      );
 
     } catch (error) {
-      logger.error(`Error processing zap event ${event.id}:`, error);
+      logger.error(`Error handling user zap notification for ${event.id}:`, error);
     }
   }
 
