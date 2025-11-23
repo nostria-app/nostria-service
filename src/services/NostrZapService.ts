@@ -381,14 +381,19 @@ class NostrZapService {
         try {
           const pushSubscription = JSON.parse(sub.subscription);
           const result = await webPush.sendNotification(pushSubscription, {
-            title,
-            body,
-            url: link,
-            data: {
-              type: 'zap',
-              amount: amountSats,
-              sender: senderPubkey,
-              eventId: event.id
+            notification: {
+              title,
+              body,
+              icon: 'https://nostria.app/icons/icon-128x128.png',
+              data: {
+                onActionClick: {
+                  default: { operation: "navigateLastFocusedOrOpen", url: link }
+                },
+                type: 'zap',
+                amount: amountSats,
+                sender: senderPubkey,
+                eventId: event.id
+              }
             }
           });
 
