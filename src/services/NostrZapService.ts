@@ -37,6 +37,7 @@ class NostrZapService {
   private prisma = PrismaClientSingleton.getInstance();
   private isRunning = false;
   private btcUsdRate: number | null = null;
+  private lastBtcUpdate: number = 0;
 
   constructor() {
     this.pool = new SimplePool();
@@ -67,11 +68,10 @@ class NostrZapService {
 
     // Fetch initial BTC price
     try {
-      this.btcUsdRate = await lightningService.getUsdBtcRate();
-      logger.info(`Fetched BTC/USD rate: $${this.btcUsdRate.toLocaleString()}`);
+      await this.updateBtcPrice();
     } catch (error) {
       logger.error('Failed to fetch initial BTC price:', error);
-      logger.warn('Will retry fetching BTC price on each event');
+      logger.warn('Will retry fetching BTC price when needed');
     }
 
     // Get all user pubkeys to listen for zaps
@@ -94,10 +94,14 @@ class NostrZapService {
       logger.warn(`Listening for ${pubkeysToListen.length} pubkeys, this might be too large for some relays`);
     }
 
+    // Set start date to Nov 22, 2025 to avoid processing old zaps on initial deployment
+    // User requested 1 day before Nov 23, 2025
+    const SINCE_TIMESTAMP = Math.floor(new Date('2025-11-22T00:00:00Z').getTime() / 1000);
+
     const filter: Filter = {
       kinds: [9735], // Zap receipt events
       '#p': pubkeysToListen, // Listen for zaps to premium pubkey AND our users
-      // No 'since' filter - process all historical events
+      since: SINCE_TIMESTAMP,
     };
 
     try {
@@ -469,6 +473,31 @@ class NostrZapService {
   }
 
   /**
+   * Update the BTC price from the external service
+   * Updates the btcUsdRate and lastBtcUpdate properties
+   */
+  private async updateBtcPrice(): Promise<void> {
+    const now = Date.now();
+    // Update if never updated or older than 10 minutes
+    if (!this.btcUsdRate || now - this.lastBtcUpdate > 10 * 60 * 1000) {
+      try {
+        const rate = await lightningService.getUsdBtcRate();
+        this.btcUsdRate = rate;
+        this.lastBtcUpdate = now;
+        logger.info(`Updated BTC/USD rate: $${rate.toLocaleString()}`);
+      } catch (error) {
+        logger.error('Failed to fetch BTC rate:', error);
+        // If we have a stale rate, keep using it but log error
+        if (this.btcUsdRate) {
+          logger.warn(`Using stale BTC rate: $${this.btcUsdRate.toLocaleString()}`);
+        } else {
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
    * Validate that the payment amount is sufficient for the subscription
    */
   private async validatePaymentAmount(
@@ -489,17 +518,14 @@ class NostrZapService {
     const expectedPriceCents = monthlyPriceCents * months;
 
     // Get current BTC/USD rate
-    let btcUsdRate = this.btcUsdRate;
-    if (!btcUsdRate) {
-      try {
-        btcUsdRate = await lightningService.getUsdBtcRate();
-        this.btcUsdRate = btcUsdRate;
-        logger.info(`Updated BTC/USD rate: $${btcUsdRate.toLocaleString()}`);
-      } catch (error) {
-        logger.error('Failed to fetch BTC price for validation:', error);
-        return { isValid: false, message: 'Failed to fetch BTC price' };
-      }
+    try {
+      await this.updateBtcPrice();
+    } catch (error) {
+      logger.error('Failed to fetch BTC price for validation:', error);
+      return { isValid: false, message: 'Failed to fetch BTC price' };
     }
+    
+    const btcUsdRate = this.btcUsdRate!;
 
     // Convert sats to USD cents
     // 1 BTC = btcUsdRate USD = btcUsdRate * 100 cents
