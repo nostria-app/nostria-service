@@ -380,7 +380,7 @@ class NostrZapService {
       const promises = subscriptions.map(async (sub) => {
         try {
           const pushSubscription = JSON.parse(sub.subscription);
-          await webPush.sendNotification(pushSubscription, {
+          const result = await webPush.sendNotification(pushSubscription, {
             title,
             body,
             url: link,
@@ -391,8 +391,18 @@ class NostrZapService {
               eventId: event.id
             }
           });
-        } catch (err) {
+
+          if (result && result.error === 'expired_subscription') {
+            logger.info(`Removing expired subscription for device ${sub.rowKey}`);
+            await notificationService.deleteEntity(recipientPubkey, sub.rowKey);
+          }
+        } catch (err: any) {
           logger.error(`Failed to send push notification to device ${sub.rowKey}:`, err);
+          
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            logger.info(`Removing expired subscription for device ${sub.rowKey} (caught error)`);
+            await notificationService.deleteEntity(recipientPubkey, sub.rowKey);
+          }
         }
       });
 

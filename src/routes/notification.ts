@@ -390,13 +390,19 @@ router.post('/send', async (req: Request, res: Response): Promise<void> => {
 
             if (pushResult && pushResult.error === 'expired_subscription') {
               logger.warn(`Expired subscription for user ${pubkey}, device key: ${subscriptionEntity.rowKey.substring(0, 16)}...`);
+              await notificationService.deleteEntity(pubkey, subscriptionEntity.rowKey);
               deviceFailCount++;
-              // Could delete expired subscription here if desired
             } else {
               deviceSuccessCount++;
             }
-          } catch (deviceError) {
+          } catch (deviceError: any) {
             logger.error(`Error sending notification to device ${subscriptionEntity.rowKey.substring(0, 16)}... for user ${pubkey}: ${(deviceError as Error).message}`);
+            
+            if (deviceError.statusCode === 410 || deviceError.statusCode === 404) {
+              logger.info(`Removing expired subscription for device ${subscriptionEntity.rowKey} (caught error)`);
+              await notificationService.deleteEntity(pubkey, subscriptionEntity.rowKey);
+            }
+            
             deviceFailCount++;
           }
         }

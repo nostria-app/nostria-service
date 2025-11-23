@@ -236,12 +236,23 @@ router.post('/send/:pubkey', authUser, async (req: SubscriptionRequest, res: Res
 
     console.log('Payload for device:', record.partitionKey, payload);
 
-    const notificationResult = await webPush.sendNotification(sub, payload);
+    try {
+      const notificationResult = await webPush.sendNotification(sub, payload);
 
-    console.log(`Notification sent to ${record.partitionKey}:`, notificationResult);
+      console.log(`Notification sent to ${record.partitionKey}:`, notificationResult);
 
-    if (notificationResult.statusCode !== 201) {
-      logger.error(`Failed to send notification to ${record.partitionKey}: ${notificationResult.statusCode}`);
+      if (notificationResult && notificationResult.error === 'expired_subscription') {
+        logger.warn(`Expired subscription for user ${pubkey}, device key: ${record.rowKey}`);
+        await notificationService.deleteEntity(pubkey, record.rowKey);
+      } else if (notificationResult.statusCode !== 201) {
+        logger.error(`Failed to send notification to ${record.partitionKey}: ${notificationResult.statusCode}`);
+      }
+    } catch (error: any) {
+      logger.error(`Failed to send notification to ${record.partitionKey}: ${error.message}`);
+      if (error.statusCode === 410 || error.statusCode === 404) {
+        logger.info(`Removing expired subscription for device ${record.rowKey} (caught error)`);
+        await notificationService.deleteEntity(pubkey, record.rowKey);
+      }
     }
   }
 
