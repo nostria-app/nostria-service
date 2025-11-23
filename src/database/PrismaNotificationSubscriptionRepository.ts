@@ -112,8 +112,9 @@ class PrismaNotificationSubscriptionRepository extends PrismaBaseRepository {
     }
   }
 
-  async deleteSubscription(id: string, pubkey: string): Promise<void> {
+  async deleteSubscription(pubkey: string, deviceKey: string): Promise<void> {
     try {
+      const id = `notification-subscription-${pubkey}-${deviceKey}`;
       await this.prisma.notificationSubscription.delete({
         where: { id }
       });
