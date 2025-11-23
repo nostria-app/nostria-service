@@ -2,6 +2,7 @@ import { NotificationSubscription } from "../models/notificationSubscription";
 import { PrismaBaseRepository } from "./PrismaBaseRepository";
 import logger from "../utils/logger";
 import { now } from "../helpers/now";
+import { Prisma } from "@prisma/client";
 
 class PrismaNotificationSubscriptionRepository extends PrismaBaseRepository {
   constructor() {
@@ -114,13 +115,22 @@ class PrismaNotificationSubscriptionRepository extends PrismaBaseRepository {
 
   async deleteSubscription(pubkey: string, deviceKey: string): Promise<void> {
     try {
-      const id = `notification-subscription-${pubkey}-${deviceKey}`;
       await this.prisma.notificationSubscription.delete({
-        where: { id }
+        where: {
+          pubkey_deviceKey: {
+            pubkey,
+            deviceKey
+          }
+        }
       });
 
-      logger.info(`Deleted notification subscription: ${id}`);
+      logger.info(`Deleted notification subscription for pubkey: ${pubkey}, deviceKey: ${deviceKey}`);
     } catch (error) {
+      // If record not found, consider it a success (idempotent delete)
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        logger.warn(`Notification subscription not found for deletion: ${pubkey}, ${deviceKey}`);
+        return;
+      }
       this.handlePrismaError(error, 'delete');
     }
   }
