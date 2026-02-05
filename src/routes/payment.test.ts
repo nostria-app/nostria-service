@@ -39,8 +39,28 @@ jest.mock('../routes/notification', () => {
   return router;
 });
 
-jest.mock('../database/paymentRepository');
-jest.mock('../database/accountRepository');
+jest.mock('../database/PrismaPaymentRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    getAllPayments: jest.fn(),
+    getPaymentsByPubkey: jest.fn(),
+  }))
+}));
+
+jest.mock('../database/PrismaAccountRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    getByPubkey: jest.fn(),
+    getByUsername: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    getAllAccounts: jest.fn(),
+  }))
+}));
+
 jest.mock('../services/LightningService');
 
 // Mock config for admin authentication
@@ -55,6 +75,32 @@ jest.mock('../config', () => ({
       entitlements: {
         notificationsPerDay: 5,
         features: ['BASIC_WEBPUSH', 'COMMUNITY_SUPPORT']
+      }
+    },
+    premium: {
+      tier: 'premium',
+      name: 'Premium',
+      pricing: {
+        monthly: { priceCents: 1000, currency: 'USD' },
+        quarterly: { priceCents: 2700, currency: 'USD' },
+        yearly: { priceCents: 9600, currency: 'USD' },
+      },
+      entitlements: {
+        notificationsPerDay: 50,
+        features: ['USERNAME', 'ADVANCED_FILTERING', 'PRIORITY_SUPPORT']
+      }
+    },
+    premium_plus: {
+      tier: 'premium_plus',
+      name: 'Premium Plus',
+      pricing: {
+        monthly: { priceCents: 2500, currency: 'USD' },
+        quarterly: { priceCents: 6700, currency: 'USD' },
+        yearly: { priceCents: 24000, currency: 'USD' },
+      },
+      entitlements: {
+        notificationsPerDay: 500,
+        features: ['USERNAME', 'ADVANCED_FILTERING', 'PRIORITY_SUPPORT', 'API_ACCESS']
       }
     }
   }
@@ -381,4 +427,118 @@ describe('Payment Routes', () => {
       expect(response.body.error).toBe('Internal server error');
     });
   });
-}); 
+
+  describe('GET /api/payment/history', () => {
+    it('should return 401 when not authenticated', async () => {
+      const response = await request(app)
+        .get('/api/payment/history');
+
+      expect(response.status).toEqual(401);
+    });
+
+    it('should return payment history for authenticated user', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history');
+      const paidTimestamp = Date.now() - 1000;
+      const mockPayments = [
+        testPayment({
+          pubkey: testAuth.pubkey,
+          isPaid: true,
+          paid: paidTimestamp,
+          tier: 'premium',
+        }),
+        testPayment({
+          pubkey: testAuth.pubkey,
+          isPaid: false,
+          expires: Date.now() + 1000000, // not expired
+        }),
+      ];
+
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValue(mockPayments);
+
+      const response = await request(app)
+        .get('/api/payment/history')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBe(2);
+      
+      // First payment is paid
+      expect(response.body[0]).toHaveProperty('id');
+      expect(response.body[0]).toHaveProperty('tier', 'premium');
+      expect(response.body[0]).toHaveProperty('status', 'paid');
+      expect(response.body[0]).toHaveProperty('paid', paidTimestamp);
+      
+      // Second payment is pending
+      expect(response.body[1]).toHaveProperty('status', 'pending');
+      
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 50);
+    });
+
+    it('should correctly identify expired payments', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history');
+      const mockPayments = [
+        testPayment({
+          pubkey: testAuth.pubkey,
+          isPaid: false,
+          expires: Date.now() - 1000, // expired
+        }),
+      ];
+
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValue(mockPayments);
+
+      const response = await request(app)
+        .get('/api/payment/history')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body[0]).toHaveProperty('status', 'expired');
+    });
+
+    it('should return empty array when no payments exist', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history');
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/payment/history')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(200);
+      expect(response.body).toEqual([]);
+    });
+
+    it('should respect limit parameter', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history?limit=25');
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValue([]);
+
+      await request(app)
+        .get('/api/payment/history?limit=25')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 25);
+    });
+
+    it('should cap limit at 100', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history?limit=500');
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValue([]);
+
+      await request(app)
+        .get('/api/payment/history?limit=500')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 100);
+    });
+
+    it('should return 500 when repository fails', async () => {
+      const testAuth = await generatePaymentNIP98('GET', '/api/payment/history');
+      mockPaymentRepository.getPaymentsByPubkey.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/api/payment/history')
+        .set('Authorization', `Nostr ${testAuth.token}`);
+
+      expect(response.status).toEqual(500);
+      expect(response.body.error).toBe('Internal server error');
+    });
+  });
+});

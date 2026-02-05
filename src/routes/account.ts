@@ -10,7 +10,7 @@ import config from '../config';
 import { features } from '../config/features';
 import RepositoryFactory from '../database/RepositoryFactory';
 import { Account } from '../models/account';
-import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt } from '../models/accountSubscription';
+import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt, extendExpiry } from '../models/accountSubscription';
 import { Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
 import validateUsername from './account/validateUsername';
@@ -539,6 +539,280 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
   } catch (error: any) {
     logger.error(`Error during signup: ${error.message}`);
     return res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     RenewSubscriptionRequest:
+ *       type: object
+ *       required:
+ *         - paymentId
+ *       properties:
+ *         paymentId:
+ *           type: string
+ *           description: Payment ID for the renewal payment
+ */
+type RenewSubscriptionRequest = NIP98AuthenticatedRequest<{}, any, { paymentId: string }, any>
+type RenewSubscriptionResponse = Response<AccountDto | ErrorBody>
+
+/**
+ * @openapi
+ * /account/renew:
+ *   post:
+ *     operationId: "RenewSubscription"
+ *     summary: Renew or extend subscription
+ *     description: |
+ *       Renew or extend an existing user's subscription using a paid invoice.
+ *       If the subscription hasn't expired yet, the new period is added to the existing expiry.
+ *       If it has expired, the subscription starts fresh from now.
+ *       Requires NIP-98 authentication.
+ *     tags:
+ *       - Account
+ *     security:
+ *       - NIP98Auth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RenewSubscriptionRequest'
+ *     responses:
+ *       '200':
+ *         description: Subscription renewed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Account'
+ *       '400':
+ *         description: Invalid request or payment not found/not paid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '401':
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '404':
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '429':
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: RenewSubscriptionResponse) => {
+  try {
+    const pubkey = req.authenticatedPubkey;
+    assert(pubkey, "Pubkey should be present for authenticated user");
+
+    const { paymentId } = req.body;
+
+    if (!paymentId) {
+      return res.status(400).json({ error: 'Payment ID is required' });
+    }
+
+    // Get the account
+    const account = await accountRepository.getByPubkey(pubkey);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Get and validate payment
+    const payment = await paymentRepository.get(paymentId, pubkey);
+
+    if (!payment) {
+      return res.status(400).json({ error: 'Payment not found' });
+    }
+
+    if (payment.pubkey !== pubkey) {
+      return res.status(400).json({ error: 'Payment is for different pubkey' });
+    }
+
+    if (!payment.isPaid) {
+      return res.status(400).json({ error: 'Payment has not been completed' });
+    }
+
+    // Get tier details
+    const tierDetails = config.tiers[payment.tier as Tier];
+    if (!tierDetails) {
+      return res.status(400).json({ error: 'Invalid tier in payment' });
+    }
+
+    // Calculate new expiry date (extends if not expired, otherwise starts fresh)
+    const newExpiry = extendExpiry(account.expires, payment.billingCycle);
+
+    // Build new subscription
+    const subscription: AccountSubscription = {
+      tier: payment.tier,
+      billingCycle: payment.billingCycle,
+      price: {
+        priceCents: payment.priceCents,
+        currency: 'USD',
+      },
+      entitlements: tierDetails.entitlements,
+    };
+
+    // Determine if tier should be upgraded
+    // premium_plus > premium > free
+    const tierPriority: Record<Tier, number> = {
+      'free': 0,
+      'premium': 1,
+      'premium_plus': 2,
+    };
+
+    const paymentTier = payment.tier as Tier;
+    const currentTier = account.tier as Tier;
+    const newTier: Tier = tierPriority[paymentTier] >= tierPriority[currentTier]
+      ? paymentTier
+      : currentTier;
+
+    // Update the account
+    const ts = now();
+    const updatedAccount = await accountRepository.update({
+      ...account,
+      tier: newTier,
+      subscription,
+      expires: newExpiry,
+      modified: ts,
+    });
+
+    logger.info(`Subscription renewed for ${pubkey.substring(0, 16)}..., tier: ${newTier}, expires: ${new Date(newExpiry).toISOString()}`);
+
+    return res.status(200).json(toAccountDto(updatedAccount));
+  } catch (error: any) {
+    logger.error(`Error renewing subscription: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to renew subscription' });
+  }
+});
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     SubscriptionHistoryItem:
+ *       type: object
+ *       properties:
+ *         paymentId:
+ *           type: string
+ *           description: Payment ID associated with this subscription event
+ *         tier:
+ *           type: string
+ *           enum: [free, premium, premium_plus]
+ *           description: Subscription tier
+ *         billingCycle:
+ *           type: string
+ *           enum: [monthly, quarterly, yearly]
+ *           description: Billing cycle
+ *         priceCents:
+ *           type: number
+ *           description: Price paid in USD cents
+ *         amountSats:
+ *           type: number
+ *           description: Amount paid in satoshis
+ *         purchaseDate:
+ *           type: number
+ *           format: timestamp
+ *           description: When the subscription was purchased/renewed
+ */
+interface SubscriptionHistoryItemDto {
+  paymentId: string;
+  tier: Tier;
+  billingCycle: string;
+  priceCents: number;
+  amountSats: number;
+  purchaseDate: number;
+}
+
+/**
+ * @openapi
+ * /account/subscription-history:
+ *   get:
+ *     operationId: "GetSubscriptionHistory"
+ *     summary: Get authenticated user's subscription history
+ *     description: |
+ *       Retrieve the subscription purchase/renewal history for the authenticated user.
+ *       Returns only completed (paid) subscription transactions.
+ *       Requires NIP-98 authentication.
+ *     tags:
+ *       - Account
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Maximum number of records to return
+ *     responses:
+ *       '200':
+ *         description: Subscription history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/SubscriptionHistoryItem'
+ *       '401':
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/subscription-history', authUser, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    const pubkey = req.authenticatedPubkey;
+    assert(pubkey, "Pubkey should be present for authenticated user");
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    // Get all paid payments for this user (these represent subscription events)
+    const payments = await paymentRepository.getPaymentsByPubkey(pubkey, limit);
+
+    // Filter to only paid payments and transform to subscription history items
+    const subscriptionHistory: SubscriptionHistoryItemDto[] = payments
+      .filter((payment: any) => payment.isPaid && payment.paid)
+      .map((payment: any) => ({
+        paymentId: payment.id,
+        tier: payment.tier as Tier,
+        billingCycle: payment.billingCycle,
+        priceCents: payment.priceCents,
+        amountSats: payment.lnAmountSat,
+        purchaseDate: payment.paid,
+      }));
+
+    logger.info(`Retrieved ${subscriptionHistory.length} subscription history items for user ${pubkey.substring(0, 16)}...`);
+
+    return res.status(200).json(subscriptionHistory);
+  } catch (error: any) {
+    logger.error(`Error getting subscription history: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to get subscription history' });
   }
 });
 

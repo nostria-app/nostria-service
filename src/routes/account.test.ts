@@ -14,8 +14,29 @@ jest.mock('../routes/notification', () => {
 });
 
 // Now import the app after mocks are set up
-jest.mock('../database/accountRepository');
-jest.mock('../database/paymentRepository');
+// Mock the Prisma repositories with jest.fn implementations
+jest.mock('../database/PrismaAccountRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    getByPubkey: jest.fn(),
+    getByUsername: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    getAllAccounts: jest.fn(),
+    hasPremiumSubscription: jest.fn(),
+  }))
+}));
+
+jest.mock('../database/PrismaPaymentRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    getAllPayments: jest.fn(),
+    getPaymentsByPubkey: jest.fn(),
+  }))
+}));
 
 // Mock config for admin authentication
 jest.mock('../config', () => ({
@@ -29,6 +50,22 @@ jest.mock('../config', () => ({
       entitlements: {
         notificationsPerDay: 5,
         features: ['BASIC_WEBPUSH', 'COMMUNITY_SUPPORT']
+      }
+    },
+    premium: {
+      tier: 'premium',
+      name: 'Premium',
+      entitlements: {
+        notificationsPerDay: 50,
+        features: ['USERNAME', 'ADVANCED_FILTERING', 'PRIORITY_SUPPORT']
+      }
+    },
+    premium_plus: {
+      tier: 'premium_plus',
+      name: 'Premium Plus',
+      entitlements: {
+        notificationsPerDay: 500,
+        features: ['USERNAME', 'ADVANCED_FILTERING', 'PRIORITY_SUPPORT', 'API_ACCESS']
       }
     }
   }
@@ -617,6 +654,292 @@ describe('Account API', () => {
         modified: mockAccount.modified,
         lastLoginDate: mockAccount.lastLoginDate,
       });
+    });
+  });
+
+  describe('POST /api/account/renew', () => {
+    let testAuth: NIP98Fixture;
+
+    beforeEach(async () => {
+      testAuth = await generateNIP98('POST');
+    });
+
+    test('should return 401 if not authenticated', async () => {
+      await request(app)
+        .post('/api/account/renew')
+        .send({ paymentId: 'payment-123' })
+        .expect(401);
+    });
+
+    test('should return 400 if paymentId is missing', async () => {
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({})
+        .expect(400);
+
+      expect(response.body.error).toBe('Payment ID is required');
+    });
+
+    test('should return 404 if account not found', async () => {
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: 'payment-123' })
+        .expect(404);
+
+      expect(response.body.error).toBe('Account not found');
+    });
+
+    test('should return 400 if payment not found', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: 'payment-123' })
+        .expect(400);
+
+      expect(response.body.error).toBe('Payment not found');
+    });
+
+    test('should return 400 if payment belongs to different pubkey', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
+      const differentPubkeyPayment = testPayment({
+        pubkey: 'different_pubkey',
+        isPaid: true,
+        paid: now(),
+      });
+
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(differentPubkeyPayment);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: differentPubkeyPayment.id })
+        .expect(400);
+
+      expect(response.body.error).toBe('Payment is for different pubkey');
+    });
+
+    test('should return 400 if payment is not paid', async () => {
+      const currentAccount = testAccount({ pubkey: testAuth.pubkey });
+      const unpaidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: false,
+      });
+
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(unpaidPayment);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: unpaidPayment.id })
+        .expect(400);
+
+      expect(response.body.error).toBe('Payment has not been completed');
+    });
+
+    test('should renew subscription successfully when current subscription is active', async () => {
+      const currentExpiry = now() + 30 * 24 * 60 * 60 * 1000; // 30 days from now
+      const currentAccount = testAccount({
+        pubkey: testAuth.pubkey,
+        tier: 'premium',
+        expires: currentExpiry,
+      });
+      const paidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: true,
+        paid: now(),
+        tier: 'premium',
+        billingCycle: 'monthly',
+      });
+
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(paidPayment);
+      mockAccountRepository.update.mockImplementation(async (account) => account);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: paidPayment.id })
+        .expect(200);
+
+      expect(response.body.tier).toBe('premium');
+      // Expiry should be extended from current expiry (not from now)
+      expect(mockAccountRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tier: 'premium',
+          expires: expect.any(Number),
+        })
+      );
+      // Verify expiry is extended from current expiry
+      const updateCall = mockAccountRepository.update.mock.calls[0][0];
+      expect(updateCall.expires).toBeGreaterThan(currentExpiry);
+    });
+
+    test('should start fresh subscription when current subscription is expired', async () => {
+      const expiredExpiry = now() - 30 * 24 * 60 * 60 * 1000; // 30 days ago
+      const currentAccount = testAccount({
+        pubkey: testAuth.pubkey,
+        tier: 'free',
+        expires: expiredExpiry,
+      });
+      const paidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: true,
+        paid: now(),
+        tier: 'premium',
+        billingCycle: 'monthly',
+      });
+
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(paidPayment);
+      mockAccountRepository.update.mockImplementation(async (account) => account);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: paidPayment.id })
+        .expect(200);
+
+      expect(response.body.tier).toBe('premium');
+      // Expiry should start from now (not from expired expiry)
+      const updateCall = mockAccountRepository.update.mock.calls[0][0];
+      expect(updateCall.expires).toBeGreaterThan(now());
+      expect(updateCall.expires).toBeLessThan(now() + 35 * 24 * 60 * 60 * 1000); // Within ~35 days
+    });
+
+    test('should upgrade tier when renewing with higher tier', async () => {
+      const currentAccount = testAccount({
+        pubkey: testAuth.pubkey,
+        tier: 'premium',
+        expires: now() + 30 * 24 * 60 * 60 * 1000,
+      });
+      const paidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: true,
+        paid: now(),
+        tier: 'premium_plus',
+        billingCycle: 'monthly',
+      });
+
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(currentAccount);
+      mockPaymentRepository.get.mockResolvedValueOnce(paidPayment);
+      mockAccountRepository.update.mockImplementation(async (account) => account);
+
+      const response = await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: paidPayment.id })
+        .expect(200);
+
+      expect(response.body.tier).toBe('premium_plus');
+    });
+
+    test('should handle server errors gracefully', async () => {
+      mockAccountRepository.getByPubkey.mockRejectedValueOnce(new Error('Database error'));
+
+      await request(app)
+        .post('/api/account/renew')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ paymentId: 'payment-123' })
+        .expect(500);
+    });
+  });
+
+  describe('GET /api/account/subscription-history', () => {
+    let testAuth: NIP98Fixture;
+
+    beforeEach(async () => {
+      testAuth = await generateNIP98('GET');
+    });
+
+    test('should return 401 if not authenticated', async () => {
+      await request(app)
+        .get('/api/account/subscription-history')
+        .expect(401);
+    });
+
+    test('should return empty array when no payments exist', async () => {
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([]);
+
+      const response = await request(app)
+        .get('/api/account/subscription-history')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .expect(200);
+
+      expect(response.body).toEqual([]);
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 50);
+    });
+
+    test('should return only paid payments as subscription history', async () => {
+      const paidTimestamp = now() - 1000;
+      const paidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: true,
+        paid: paidTimestamp,
+        tier: 'premium',
+      });
+      const unpaidPayment = testPayment({
+        pubkey: testAuth.pubkey,
+        isPaid: false,
+        paid: undefined,
+      });
+
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([paidPayment, unpaidPayment]);
+
+      const response = await request(app)
+        .get('/api/account/subscription-history')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .expect(200);
+
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toEqual({
+        paymentId: paidPayment.id,
+        tier: paidPayment.tier,
+        billingCycle: paidPayment.billingCycle,
+        priceCents: paidPayment.priceCents,
+        amountSats: paidPayment.lnAmountSat,
+        purchaseDate: paidTimestamp,
+      });
+    });
+
+    test('should respect limit parameter', async () => {
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([]);
+
+      await request(app)
+        .get('/api/account/subscription-history?limit=25')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .expect(200);
+
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 25);
+    });
+
+    test('should cap limit at 100', async () => {
+      mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([]);
+
+      await request(app)
+        .get('/api/account/subscription-history?limit=500')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .expect(200);
+
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 100);
+    });
+
+    test('should handle server errors gracefully', async () => {
+      mockPaymentRepository.getPaymentsByPubkey.mockRejectedValueOnce(new Error('Database error'));
+
+      await request(app)
+        .get('/api/account/subscription-history')
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .expect(500);
     });
   });
 });

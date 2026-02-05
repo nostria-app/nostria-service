@@ -31,6 +31,7 @@ export interface IPaymentRepository {
   update(payment: any): Promise<any>;
   get(id: string, pubkey: string): Promise<any | null>;
   getAllPayments(limit?: number): Promise<any[]>;
+  getPaymentsByPubkey(pubkey: string, limit?: number): Promise<any[]>;
 }
 
 export interface IUserSettingsRepository {

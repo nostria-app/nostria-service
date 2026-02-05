@@ -477,4 +477,153 @@ router.get('/', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res: Re
   }
 });
 
+const authRateLimit = createRateLimit(
+  15 * 60 * 1000, // 15 minutes
+  500, // limit each IP to 500 requests per windowMs
+  'Too many authenticated requests from this IP, please try again later.'
+);
+
+// Combined middleware for authenticated user routes
+const authUser = [authRateLimit, requireNIP98Auth];
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     PaymentHistoryItem:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           description: Payment ID
+ *         tier:
+ *           type: string
+ *           enum: [free, premium, premium_plus]
+ *           description: Subscription tier purchased
+ *         billingCycle:
+ *           type: string
+ *           enum: [monthly, quarterly, yearly]
+ *           description: Billing cycle
+ *         priceCents:
+ *           type: number
+ *           description: Price in USD cents
+ *         lnAmountSat:
+ *           type: number
+ *           description: Amount paid in satoshis
+ *         status:
+ *           type: string
+ *           enum: [pending, expired, paid]
+ *           description: Payment status
+ *         paid:
+ *           type: number
+ *           format: timestamp
+ *           nullable: true
+ *           description: Timestamp when payment was completed
+ *         created:
+ *           type: number
+ *           format: timestamp
+ *           description: Creation timestamp
+ */
+interface PaymentHistoryItemDto {
+  id: string;
+  tier: Tier;
+  billingCycle: BillingCycle;
+  priceCents: number;
+  lnAmountSat: number;
+  status: PaymentStatus;
+  paid?: number;
+  created: number;
+}
+
+const toPaymentHistoryItemDto = (payment: Payment, status: PaymentStatus): PaymentHistoryItemDto => ({
+  id: payment.id,
+  tier: payment.tier,
+  billingCycle: payment.billingCycle,
+  priceCents: payment.priceCents,
+  lnAmountSat: payment.lnAmountSat,
+  status,
+  paid: payment.paid,
+  created: payment.created,
+});
+
+/**
+ * @openapi
+ * /payment/history:
+ *   get:
+ *     operationId: "GetPaymentHistory"
+ *     summary: Get authenticated user's payment history
+ *     description: |
+ *       Retrieve the payment history for the authenticated user.
+ *       Returns only payments belonging to the authenticated user.
+ *       Requires NIP-98 authentication.
+ *     tags: [Payment]
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Maximum number of payments to return
+ *     responses:
+ *       200:
+ *         description: Payment history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/PaymentHistoryItem'
+ *       401:
+ *         description: Unauthorized - NIP-98 authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/history', authUser, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    const pubkey = req.authenticatedPubkey;
+    
+    if (!pubkey) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    const payments = await paymentRepository.getPaymentsByPubkey(pubkey, limit);
+
+    // Convert payments to history DTOs with status calculation
+    const paymentHistory = payments.map((payment: Payment) => {
+      let status: PaymentStatus;
+      
+      if (payment.isPaid) {
+        status = 'paid';
+      } else if (payment.expires < now()) {
+        status = 'expired';
+      } else {
+        status = 'pending';
+      }
+
+      return toPaymentHistoryItemDto(payment, status);
+    });
+
+    logger.info(`Retrieved ${paymentHistory.length} payment history items for user ${pubkey.substring(0, 16)}...`);
+
+    return res.json(paymentHistory);
+  } catch (error) {
+    logger.error('Error retrieving payment history:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
