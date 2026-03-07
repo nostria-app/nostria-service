@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import OAuth from 'oauth-1.0a';
 
 import RepositoryFactory from '../database/RepositoryFactory';
+import { XPostUsageSummary } from '../models/xPostMetric';
 import logger from '../utils/logger';
 
 export class XPremiumRequiredError extends Error {
@@ -58,11 +59,13 @@ const DEFAULT_NOSTRIA_APP_URL = 'https://nostria.app/';
 class XService {
   private readonly userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
   private readonly accountRepository = RepositoryFactory.getAccountRepository();
+  private readonly xPostRepository = RepositoryFactory.getXPostRepository();
   private readonly consumerKey = process.env.X_CONSUMER_KEY || process.env.X_CONSUMER_API_KEY || '';
   private readonly consumerSecret = process.env.X_CONSUMER_SECRET || process.env.X_CONSUMER_API_SECRET || '';
   private readonly callbackUrl = process.env.X_CALLBACK_URL || DEFAULT_X_CALLBACK_URL;
   private readonly appUrl = process.env.NOSTRIA_APP_URL || DEFAULT_NOSTRIA_APP_URL;
   private readonly encryptionSecret = process.env.X_TOKEN_ENCRYPTION_SECRET || '';
+  private readonly maxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '0', 10) || 0);
   private readonly oauth = new OAuth({
     consumer: {
       key: this.consumerKey,
@@ -85,6 +88,16 @@ class XService {
     if (!hasPremiumSubscription) {
       throw new XPremiumRequiredError();
     }
+  }
+
+  private async assertPostingLimit(pubkey: string): Promise<XPostUsageSummary> {
+    const usageSummary = await this.xPostRepository.getUsageSummary(pubkey);
+
+    if (this.maxPostsPer24h > 0 && usageSummary.postsLast24h >= this.maxPostsPer24h) {
+      throw new Error(`X posting limit reached for the last 24 hours (${this.maxPostsPer24h} posts)`);
+    }
+
+    return usageSummary;
   }
 
   private isMissingXColumnsError(error: unknown): boolean {
@@ -489,6 +502,7 @@ class XService {
   async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
     this.assertConfigured();
     await this.assertPremiumAccess(pubkey);
+    await this.assertPostingLimit(pubkey);
 
     const settings = await this.userSettingsRepository.getUserSettings(pubkey);
     if (!settings?.xAccessToken || !settings?.xAccessSecret) {
@@ -521,6 +535,12 @@ class XService {
 
     if (!response.data?.id || !response.data.text) {
       throw new Error('X did not return a created post');
+    }
+
+    try {
+      await this.xPostRepository.recordPost(pubkey, response.data.id, mediaIds.length > 0);
+    } catch (error) {
+      logger.error('Failed to persist X post usage metrics after successful post', error);
     }
 
     return response.data;

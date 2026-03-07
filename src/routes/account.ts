@@ -18,6 +18,8 @@ import validateUsername from './account/validateUsername';
 // Get repository instances from factory
 const accountRepository = RepositoryFactory.getAccountRepository();
 const paymentRepository = RepositoryFactory.getPaymentRepository();
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+const xPostRepository = RepositoryFactory.getXPostRepository();
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -193,6 +195,18 @@ interface AccountListDto {
   created: number;
   modified: number;
   lastLoginDate?: number;
+  xConnection: {
+    connected: boolean;
+    username?: string;
+    userId?: string;
+  };
+  xUsage: {
+    totalPosts: number;
+    postsLast24h: number;
+    lastPosted?: number;
+    limit24h?: number;
+    remaining24h?: number;
+  };
 }
 
 /**
@@ -930,6 +944,7 @@ router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res
   try {
     console.log('Account list endpoint reached with auth:', req.authenticatedPubkey);
     const limit = parseInt(req.query.limit as string) || 100;
+    const xMaxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '0', 10) || 0);
     
     // Validate limit
     if (limit < 1 || limit > 1000) {
@@ -937,9 +952,19 @@ router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res
     }
 
     const accounts = await accountRepository.getAllAccounts(limit);
+    const pubkeys = accounts.map((account) => account.pubkey);
+    const [xAccountSummaries, xUsageSummaries] = await Promise.all([
+      userSettingsRepository.getXAccountSummaries(pubkeys),
+      xPostRepository.getUsageSummaries(pubkeys),
+    ]);
 
     // Convert accounts to DTOs
-    const accountDtos = accounts.map(account => toAccountListDto(account));
+    const accountDtos = accounts.map((account) => toAccountListDto(
+      account,
+      xAccountSummaries[account.pubkey],
+      xUsageSummaries[account.pubkey],
+      xMaxPostsPer24h,
+    ));
 
     logger.info(`Retrieved ${accountDtos.length} accounts for authenticated user ${req.authenticatedPubkey?.substring(0, 16)}...`);
 
@@ -1341,7 +1366,12 @@ router.post('/:pubkey/extend', requireAdminAuth, async (req: NIP98AuthenticatedR
 });
 
 // Helper function to convert Account to AccountListDto
-const toAccountListDto = (account: Account): AccountListDto => ({
+const toAccountListDto = (
+  account: Account,
+  xConnection?: { connected: boolean; username?: string; userId?: string },
+  xUsage?: { totalPosts: number; postsLast24h: number; lastPosted?: number },
+  xMaxPostsPer24h = 0,
+): AccountListDto => ({
   id: account.id,
   type: account.type as 'account',
   pubkey: account.pubkey,
@@ -1352,6 +1382,18 @@ const toAccountListDto = (account: Account): AccountListDto => ({
   created: account.created,
   modified: account.modified,
   lastLoginDate: account.lastLoginDate,
+  xConnection: {
+    connected: xConnection?.connected ?? false,
+    username: xConnection?.username,
+    userId: xConnection?.userId,
+  },
+  xUsage: {
+    totalPosts: xUsage?.totalPosts ?? 0,
+    postsLast24h: xUsage?.postsLast24h ?? 0,
+    lastPosted: xUsage?.lastPosted,
+    limit24h: xMaxPostsPer24h > 0 ? xMaxPostsPer24h : undefined,
+    remaining24h: xMaxPostsPer24h > 0 ? Math.max(0, xMaxPostsPer24h - (xUsage?.postsLast24h ?? 0)) : undefined,
+  },
 });
 
 export default router; 

@@ -39,3 +39,10 @@ export interface XRequestTokenData {
   requestToken: string;
   requestSecret: string;
 }
+
+export interface XAccountSummary {
+  pubkey: string;
+  connected: boolean;
+  username?: string;
+  userId?: string;
+}

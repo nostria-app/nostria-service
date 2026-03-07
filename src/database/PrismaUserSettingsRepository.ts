@@ -1,4 +1,4 @@
-import { UserSettings, UserSettingsUpdate, XConnectionData, XRequestTokenData } from "../models/userSettings";
+import { UserSettings, UserSettingsUpdate, XAccountSummary, XConnectionData, XRequestTokenData } from "../models/userSettings";
 import { PrismaBaseRepository } from "./PrismaBaseRepository";
 import logger from "../utils/logger";
 import { now } from "../helpers/now";
@@ -6,6 +6,17 @@ import { now } from "../helpers/now";
 class PrismaUserSettingsRepository extends PrismaBaseRepository {
   constructor() {
     super('user-settings');
+  }
+
+  private isMissingXColumnsError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return error.message.includes('user_settings.xUserId')
+      || error.message.includes('user_settings.xUsername')
+      || error.message.includes('user_settings.xAccessToken')
+      || error.message.includes('user_settings.xAccessSecret');
   }
 
   private transformPrismaUserSettingsToUserSettings(prismaUserSettings: any): UserSettings {
@@ -125,6 +136,44 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
     } catch (error) {
       logger.error('Failed to get user settings by X request token:', error);
       throw new Error(`Failed to get user settings by X request token: ${(error as Error).message}`);
+    }
+  }
+
+  async getXAccountSummaries(pubkeys: string[]): Promise<Record<string, XAccountSummary>> {
+    if (pubkeys.length === 0) {
+      return {};
+    }
+
+    try {
+      const settings = await this.prisma.userSettings.findMany({
+        where: {
+          pubkey: {
+            in: pubkeys,
+          },
+        },
+        select: {
+          pubkey: true,
+          xUserId: true,
+          xUsername: true,
+          xAccessToken: true,
+          xAccessSecret: true,
+        },
+      });
+
+      return Object.fromEntries(settings.map((setting) => [setting.pubkey, {
+        pubkey: setting.pubkey,
+        connected: !!(setting.xAccessToken && setting.xAccessSecret),
+        username: setting.xUsername ?? undefined,
+        userId: setting.xUserId ?? undefined,
+      } satisfies XAccountSummary]));
+    } catch (error) {
+      if (this.isMissingXColumnsError(error)) {
+        logger.warn('X settings columns are not available yet; returning empty X account summaries');
+        return {};
+      }
+
+      logger.error('Failed to get X account summaries:', error);
+      throw new Error(`Failed to get X account summaries: ${(error as Error).message}`);
     }
   }
 

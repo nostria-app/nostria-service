@@ -38,6 +38,33 @@ jest.mock('../database/PrismaPaymentRepository', () => ({
   }))
 }));
 
+jest.mock('../database/PrismaUserSettingsRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    getUserSettings: jest.fn(),
+    getUserSettingsByXRequestToken: jest.fn(),
+    getXAccountSummaries: jest.fn(),
+    upsertUserSettings: jest.fn(),
+    updateUserSettings: jest.fn(),
+    storeXRequestToken: jest.fn(),
+    clearXRequestToken: jest.fn(),
+    connectXAccount: jest.fn(),
+    disconnectXAccount: jest.fn(),
+    deleteUserSettings: jest.fn(),
+    getUsersByReleaseChannel: jest.fn(),
+    getDefaultSettings: jest.fn(),
+  }))
+}));
+
+jest.mock('../database/PrismaXPostRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    recordPost: jest.fn(),
+    getUsageSummary: jest.fn(),
+    getUsageSummaries: jest.fn(),
+  }))
+}));
+
 // Mock config for admin authentication
 jest.mock('../config', () => ({
   admin: {
@@ -82,11 +109,15 @@ import config from '../config';
 
 const paymentRepository = RepositoryFactory.getPaymentRepository();
 const accountRepository = RepositoryFactory.getAccountRepository();
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+const xPostRepository = RepositoryFactory.getXPostRepository();
 import { now } from '../helpers/now';
 import { Account } from '../models/account';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
+const mockUserSettingsRepository = userSettingsRepository as jest.Mocked<typeof userSettingsRepository>;
+const mockXPostRepository = xPostRepository as jest.Mocked<typeof xPostRepository>;
 
 // Helper function to generate admin NIP-98 token
 const generateAdminNIP98 = async (method = 'GET', url = '/api/account/list'): Promise<NIP98Fixture> => {
@@ -106,6 +137,8 @@ describe('Account API', () => {
   beforeEach(() => {
     account = testAccount()
     jest.resetAllMocks();
+    mockUserSettingsRepository.getXAccountSummaries.mockResolvedValue({});
+    mockXPostRepository.getUsageSummaries.mockResolvedValue({});
   });
 
   describe('GET /api/account/:pubkeyOrUsername', () => {
@@ -567,6 +600,8 @@ describe('Account API', () => {
       expect(response.body[0]).toHaveProperty('subscription');
       expect(response.body[0]).toHaveProperty('created');
       expect(response.body[0]).toHaveProperty('modified');
+      expect(response.body[0]).toHaveProperty('xConnection');
+      expect(response.body[0]).toHaveProperty('xUsage');
       expect(response.body[0].type).toBe('account');
       expect(mockAccountRepository.getAllAccounts).toHaveBeenCalledWith(100);
     });
@@ -636,6 +671,22 @@ describe('Account API', () => {
       });
       
       mockAccountRepository.getAllAccounts.mockResolvedValue([mockAccount]);
+      mockUserSettingsRepository.getXAccountSummaries.mockResolvedValue({
+        [mockAccount.pubkey]: {
+          pubkey: mockAccount.pubkey,
+          connected: true,
+          username: 'connected_user',
+          userId: 'x-user-1',
+        },
+      });
+      mockXPostRepository.getUsageSummaries.mockResolvedValue({
+        [mockAccount.pubkey]: {
+          pubkey: mockAccount.pubkey,
+          totalPosts: 7,
+          postsLast24h: 2,
+          lastPosted: now() - 60000,
+        },
+      });
 
       const response = await request(app)
         .get('/api/account/list')
@@ -653,6 +704,18 @@ describe('Account API', () => {
         created: mockAccount.created,
         modified: mockAccount.modified,
         lastLoginDate: mockAccount.lastLoginDate,
+        xConnection: {
+          connected: true,
+          username: 'connected_user',
+          userId: 'x-user-1',
+        },
+        xUsage: {
+          totalPosts: 7,
+          postsLast24h: 2,
+          lastPosted: expect.any(Number),
+          limit24h: undefined,
+          remaining24h: undefined,
+        },
       });
     });
   });

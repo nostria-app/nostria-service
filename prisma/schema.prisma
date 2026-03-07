@@ -19,6 +19,7 @@ model Account {
   subscription              Json
   backupJobs                BackupJob[]
   notificationLogs          NotificationLog[]
+  xPostMetrics              XPostMetric[]
 
   @@map("accounts")
 }
@@ -123,6 +124,21 @@ model UserSettings {
   modified       BigInt
 
   @@map("user_settings")
+}
+
+model XPostMetric {
+  id       String  @id @default(uuid())
+  pubkey   String
+  xPostId  String  @unique
+  hasMedia Boolean
+  created  BigInt
+  modified BigInt
+  account  Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
+
+  @@index([pubkey])
+  @@index([created])
+  @@index([pubkey, created])
+  @@map("x_post_metrics")
 }
 
 model ProcessedZapEvent {

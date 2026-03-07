@@ -1,6 +1,7 @@
 import PrismaAccountRepository from './PrismaAccountRepository';
 import PrismaBackupJobRepository from './PrismaBackupJobRepository';
 import PrismaPaymentRepository from './PrismaPaymentRepository';
+import PrismaXPostRepository from './PrismaXPostRepository';
 import PrismaUserSettingsRepository from './PrismaUserSettingsRepository';
 import PrismaNotificationSubscriptionRepository from './PrismaNotificationSubscriptionRepository';
 import PrismaNotificationSettingsRepository from './PrismaNotificationSettingsRepository';
@@ -38,6 +39,7 @@ export interface IUserSettingsRepository {
   upsertUserSettings(pubkey: string, settingsData: any): Promise<any>;
   getUserSettings(pubkey: string): Promise<any | null>;
   getUserSettingsByXRequestToken(requestToken: string): Promise<any | null>;
+  getXAccountSummaries(pubkeys: string[]): Promise<Record<string, any>>;
   updateUserSettings(pubkey: string, updates: any): Promise<any>;
   storeXRequestToken(pubkey: string, tokenData: any): Promise<any>;
   clearXRequestToken(pubkey: string): Promise<any>;
@@ -63,10 +65,17 @@ export interface INotificationSettingsRepository {
   getAllSettings(limit?: number): Promise<any[]>;
 }
 
+export interface IXPostRepository {
+  recordPost(pubkey: string, xPostId: string, hasMedia: boolean): Promise<any>;
+  getUsageSummary(pubkey: string): Promise<any>;
+  getUsageSummaries(pubkeys: string[]): Promise<Record<string, any>>;
+}
+
 class RepositoryFactory {
   private static prismaAccountRepository?: PrismaAccountRepository;
   private static prismaBackupJobRepository?: PrismaBackupJobRepository;
   private static prismaPaymentRepository?: PrismaPaymentRepository;
+  private static prismaXPostRepository?: PrismaXPostRepository;
   private static prismaUserSettingsRepository?: PrismaUserSettingsRepository;
   private static prismaNotificationSubscriptionRepository?: PrismaNotificationSubscriptionRepository;
   private static prismaNotificationSettingsRepository?: PrismaNotificationSettingsRepository;
@@ -90,6 +99,13 @@ class RepositoryFactory {
       this.prismaPaymentRepository = new PrismaPaymentRepository();
     }
     return this.prismaPaymentRepository;
+  }
+
+  static getXPostRepository(): IXPostRepository {
+    if (!this.prismaXPostRepository) {
+      this.prismaXPostRepository = new PrismaXPostRepository();
+    }
+    return this.prismaXPostRepository;
   }
 
   static getUserSettingsRepository(): IUserSettingsRepository {
