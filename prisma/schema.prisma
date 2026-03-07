@@ -112,6 +112,13 @@ model UserSettings {
   pubkey         String  @unique
   releaseChannel String
   socialSharing  Boolean
+  xUserId        String?
+  xUsername      String?
+  xAccessToken   String?
+  xAccessSecret  String?
+  xRequestToken  String?
+  xRequestSecret String?
+  xRequestCreated BigInt?
   created        BigInt
   modified       BigInt
 

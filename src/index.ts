@@ -22,6 +22,7 @@ import backupRoutes from './routes/backup';
 import settingsRoutes from './routes/settings';
 import swaggerRoutes from './routes/swagger';
 import usersRoutes from './routes/users';
+import xRoutes from './routes/x';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -95,6 +96,7 @@ app.use('/api/account', account);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/backup', backupRoutes); // Backup management endpoints
 app.use('/api/settings', settingsRoutes); // User settings endpoints
+app.use('/api/x', xRoutes); // X dual-posting endpoints
 app.use('/api/users', apiKeyAuth, usersRoutes); // Protected users endpoint
 
 // Error handling middleware

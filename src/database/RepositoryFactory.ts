@@ -37,7 +37,12 @@ export interface IPaymentRepository {
 export interface IUserSettingsRepository {
   upsertUserSettings(pubkey: string, settingsData: any): Promise<any>;
   getUserSettings(pubkey: string): Promise<any | null>;
+  getUserSettingsByXRequestToken(requestToken: string): Promise<any | null>;
   updateUserSettings(pubkey: string, updates: any): Promise<any>;
+  storeXRequestToken(pubkey: string, tokenData: any): Promise<any>;
+  clearXRequestToken(pubkey: string): Promise<any>;
+  connectXAccount(pubkey: string, connectionData: any): Promise<any>;
+  disconnectXAccount(pubkey: string): Promise<any>;
   deleteUserSettings(pubkey: string): Promise<void>;
   getUsersByReleaseChannel(channel: 'stable' | 'beta' | 'alpha'): Promise<string[]>;
   getDefaultSettings(): any;

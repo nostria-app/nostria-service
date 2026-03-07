@@ -1,4 +1,4 @@
-import { UserSettings, UserSettingsUpdate } from "../models/userSettings";
+import { UserSettings, UserSettingsUpdate, XConnectionData, XRequestTokenData } from "../models/userSettings";
 import { PrismaBaseRepository } from "./PrismaBaseRepository";
 import logger from "../utils/logger";
 import { now } from "../helpers/now";
@@ -15,6 +15,13 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
       pubkey: prismaUserSettings.pubkey,
       releaseChannel: prismaUserSettings.releaseChannel,
       socialSharing: prismaUserSettings.socialSharing,
+      xUserId: prismaUserSettings.xUserId ?? undefined,
+      xUsername: prismaUserSettings.xUsername ?? undefined,
+      xAccessToken: prismaUserSettings.xAccessToken ?? undefined,
+      xAccessSecret: prismaUserSettings.xAccessSecret ?? undefined,
+      xRequestToken: prismaUserSettings.xRequestToken ?? undefined,
+      xRequestSecret: prismaUserSettings.xRequestSecret ?? undefined,
+      xRequestCreated: prismaUserSettings.xRequestCreated ? Number(prismaUserSettings.xRequestCreated) : undefined,
       created: Number(prismaUserSettings.created),
       modified: Number(prismaUserSettings.modified)
     };
@@ -26,6 +33,13 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
       pubkey: userSettings.pubkey,
       releaseChannel: userSettings.releaseChannel,
       socialSharing: userSettings.socialSharing,
+      xUserId: userSettings.xUserId ?? null,
+      xUsername: userSettings.xUsername ?? null,
+      xAccessToken: userSettings.xAccessToken ?? null,
+      xAccessSecret: userSettings.xAccessSecret ?? null,
+      xRequestToken: userSettings.xRequestToken ?? null,
+      xRequestSecret: userSettings.xRequestSecret ?? null,
+      xRequestCreated: userSettings.xRequestCreated ? BigInt(userSettings.xRequestCreated) : null,
       created: BigInt(userSettings.created),
       modified: BigInt(userSettings.modified || userSettings.created)
     };
@@ -97,6 +111,23 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
     }
   }
 
+  async getUserSettingsByXRequestToken(requestToken: string): Promise<UserSettings | null> {
+    try {
+      const settings = await this.prisma.userSettings.findFirst({
+        where: { xRequestToken: requestToken }
+      });
+
+      if (!settings) {
+        return null;
+      }
+
+      return this.transformPrismaUserSettingsToUserSettings(settings);
+    } catch (error) {
+      logger.error('Failed to get user settings by X request token:', error);
+      throw new Error(`Failed to get user settings by X request token: ${(error as Error).message}`);
+    }
+  }
+
   /**
    * Update existing user settings
    * @param pubkey - User's public key
@@ -125,6 +156,133 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
     } catch (error) {
       logger.error('Failed to update user settings:', error);
       throw new Error(`Failed to update user settings: ${(error as Error).message}`);
+    }
+  }
+
+  async storeXRequestToken(pubkey: string, tokenData: XRequestTokenData): Promise<UserSettings> {
+    try {
+      const existing = await this.getUserSettings(pubkey);
+      const id = existing?.id || `user-settings-${pubkey}`;
+      const created = existing?.created || now();
+
+      const updatedSettings = await this.prisma.userSettings.upsert({
+        where: { pubkey },
+        update: {
+          xRequestToken: tokenData.requestToken,
+          xRequestSecret: tokenData.requestSecret,
+          xRequestCreated: BigInt(now()),
+          modified: BigInt(now())
+        },
+        create: {
+          id,
+          pubkey,
+          releaseChannel: existing?.releaseChannel || 'stable',
+          socialSharing: existing?.socialSharing || false,
+          xRequestToken: tokenData.requestToken,
+          xRequestSecret: tokenData.requestSecret,
+          xRequestCreated: BigInt(now()),
+          created: BigInt(created),
+          modified: BigInt(now())
+        }
+      });
+
+      return this.transformPrismaUserSettingsToUserSettings(updatedSettings);
+    } catch (error) {
+      logger.error('Failed to store X request token:', error);
+      throw new Error(`Failed to store X request token: ${(error as Error).message}`);
+    }
+  }
+
+  async clearXRequestToken(pubkey: string): Promise<UserSettings> {
+    try {
+      const existing = await this.getUserSettings(pubkey);
+
+      if (!existing) {
+        throw new Error('User settings not found');
+      }
+
+      const updatedSettings = await this.prisma.userSettings.update({
+        where: { pubkey },
+        data: {
+          xRequestToken: null,
+          xRequestSecret: null,
+          xRequestCreated: null,
+          modified: BigInt(now())
+        }
+      });
+
+      return this.transformPrismaUserSettingsToUserSettings(updatedSettings);
+    } catch (error) {
+      logger.error('Failed to clear X request token:', error);
+      throw new Error(`Failed to clear X request token: ${(error as Error).message}`);
+    }
+  }
+
+  async connectXAccount(pubkey: string, connectionData: XConnectionData): Promise<UserSettings> {
+    try {
+      const existing = await this.getUserSettings(pubkey);
+      const id = existing?.id || `user-settings-${pubkey}`;
+      const created = existing?.created || now();
+
+      const updatedSettings = await this.prisma.userSettings.upsert({
+        where: { pubkey },
+        update: {
+          xUserId: connectionData.userId,
+          xUsername: connectionData.username,
+          xAccessToken: connectionData.accessToken,
+          xAccessSecret: connectionData.accessSecret,
+          xRequestToken: null,
+          xRequestSecret: null,
+          xRequestCreated: null,
+          modified: BigInt(now())
+        },
+        create: {
+          id,
+          pubkey,
+          releaseChannel: existing?.releaseChannel || 'stable',
+          socialSharing: existing?.socialSharing || false,
+          xUserId: connectionData.userId,
+          xUsername: connectionData.username,
+          xAccessToken: connectionData.accessToken,
+          xAccessSecret: connectionData.accessSecret,
+          created: BigInt(created),
+          modified: BigInt(now())
+        }
+      });
+
+      return this.transformPrismaUserSettingsToUserSettings(updatedSettings);
+    } catch (error) {
+      logger.error('Failed to connect X account:', error);
+      throw new Error(`Failed to connect X account: ${(error as Error).message}`);
+    }
+  }
+
+  async disconnectXAccount(pubkey: string): Promise<UserSettings> {
+    try {
+      const existing = await this.getUserSettings(pubkey);
+
+      if (!existing) {
+        throw new Error('User settings not found');
+      }
+
+      const updatedSettings = await this.prisma.userSettings.update({
+        where: { pubkey },
+        data: {
+          xUserId: null,
+          xUsername: null,
+          xAccessToken: null,
+          xAccessSecret: null,
+          xRequestToken: null,
+          xRequestSecret: null,
+          xRequestCreated: null,
+          modified: BigInt(now())
+        }
+      });
+
+      return this.transformPrismaUserSettingsToUserSettings(updatedSettings);
+    } catch (error) {
+      logger.error('Failed to disconnect X account:', error);
+      throw new Error(`Failed to disconnect X account: ${(error as Error).message}`);
     }
   }
 
