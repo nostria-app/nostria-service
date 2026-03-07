@@ -944,7 +944,7 @@ router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res
   try {
     console.log('Account list endpoint reached with auth:', req.authenticatedPubkey);
     const limit = parseInt(req.query.limit as string) || 100;
-    const xMaxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '0', 10) || 0);
+    const xMaxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '12', 10) || 12);
     
     // Validate limit
     if (limit < 1 || limit > 1000) {

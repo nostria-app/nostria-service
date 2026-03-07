@@ -148,12 +148,9 @@ class NostrZapService {
    * Handle a zap receipt event
    */
   private async handleZapEvent(event: Event): Promise<void> {
-    logger.info(`Received zap receipt event ${event.id} from ${event.pubkey}`);
-
     // Check if we've already processed this event
     const alreadyProcessed = await this.isEventProcessed(event.id);
     if (alreadyProcessed) {
-      logger.info(`Zap event ${event.id} already processed, skipping`);
       return;
     }
 
