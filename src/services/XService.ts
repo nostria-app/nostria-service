@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import OAuth from 'oauth-1.0a';
 
 import RepositoryFactory from '../database/RepositoryFactory';
-import { XPostUsageSummary } from '../models/xPostMetric';
+import { XLinkedPost, XPostUsageSummary } from '../models/xPostMetric';
 import logger from '../utils/logger';
 
 export class XPremiumRequiredError extends Error {
@@ -27,6 +27,8 @@ type XStatus = {
 type XPostResult = {
   id: string;
   text: string;
+  url: string;
+  nostrEventId?: string;
 };
 
 type XMediaInput = {
@@ -34,6 +36,8 @@ type XMediaInput = {
   mimeType?: string;
   fallbackUrls?: string[];
 };
+
+const buildXPostUrl = (xPostId: string): string => `https://x.com/i/status/${xPostId}`;
 
 type XMediaUploadResponse = {
   data?: {
@@ -526,7 +530,11 @@ class XService {
     };
   }
 
-  async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
+  async getLinkedPost(pubkey: string, nostrEventId: string): Promise<XLinkedPost | null> {
+    return this.xPostRepository.getLinkedPost(pubkey, nostrEventId);
+  }
+
+  async createPost(pubkey: string, text: string, media: XMediaInput[] = [], nostrEventId?: string): Promise<XPostResult> {
     this.assertConfigured();
     await this.assertPremiumAccess(pubkey);
     await this.assertPostingLimit(pubkey);
@@ -564,13 +572,20 @@ class XService {
       throw new Error('X did not return a created post');
     }
 
+    const result: XPostResult = {
+      id: response.data.id,
+      text: response.data.text,
+      url: buildXPostUrl(response.data.id),
+      nostrEventId,
+    };
+
     try {
-      await this.xPostRepository.recordPost(pubkey, response.data.id, mediaIds.length > 0);
+      await this.xPostRepository.recordPost(pubkey, response.data.id, mediaIds.length > 0, nostrEventId);
     } catch (error) {
       logger.error('Failed to persist X post usage metrics after successful post', error);
     }
 
-    return response.data;
+    return result;
   }
 }
 

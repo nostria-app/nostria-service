@@ -129,6 +129,7 @@ model UserSettings {
 model XPostMetric {
   id       String  @id @default(uuid())
   pubkey   String
+  nostrEventId String?
   xPostId  String  @unique
   hasMedia Boolean
   created  BigInt
@@ -136,6 +137,7 @@ model XPostMetric {
   account  Account @relation(fields: [pubkey], references: [pubkey], onDelete: Cascade)
 
   @@index([pubkey])
+  @@index([pubkey, nostrEventId])
   @@index([created])
   @@index([pubkey, created])
   @@map("x_post_metrics")

@@ -66,7 +66,8 @@ export interface INotificationSettingsRepository {
 }
 
 export interface IXPostRepository {
-  recordPost(pubkey: string, xPostId: string, hasMedia: boolean): Promise<any>;
+  recordPost(pubkey: string, xPostId: string, hasMedia: boolean, nostrEventId?: string): Promise<any>;
+  getLinkedPost(pubkey: string, nostrEventId: string): Promise<any | null>;
   getUsageSummary(pubkey: string): Promise<any>;
   getUsageSummaries(pubkeys: string[]): Promise<Record<string, any>>;
 }

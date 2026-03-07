@@ -1,7 +1,9 @@
-import { XPostMetric, XPostUsageSummary } from '../models/xPostMetric';
+import { XLinkedPost, XPostMetric, XPostUsageSummary } from '../models/xPostMetric';
 import { now } from '../helpers/now';
 import { PrismaBaseRepository } from './PrismaBaseRepository';
 import logger from '../utils/logger';
+
+const buildXPostUrl = (xPostId: string): string => `https://x.com/i/status/${xPostId}`;
 
 class PrismaXPostRepository extends PrismaBaseRepository {
   constructor() {
@@ -11,6 +13,7 @@ class PrismaXPostRepository extends PrismaBaseRepository {
   private transformPrismaXPostMetric(prismaXPostMetric: {
     id: string;
     pubkey: string;
+    nostrEventId: string | null;
     xPostId: string;
     hasMedia: boolean;
     created: bigint;
@@ -20,6 +23,7 @@ class PrismaXPostRepository extends PrismaBaseRepository {
       id: prismaXPostMetric.id,
       type: 'x-post-metric',
       pubkey: prismaXPostMetric.pubkey,
+      nostrEventId: prismaXPostMetric.nostrEventId || undefined,
       xPostId: prismaXPostMetric.xPostId,
       hasMedia: prismaXPostMetric.hasMedia,
       created: Number(prismaXPostMetric.created),
@@ -27,12 +31,29 @@ class PrismaXPostRepository extends PrismaBaseRepository {
     };
   }
 
-  async recordPost(pubkey: string, xPostId: string, hasMedia: boolean): Promise<XPostMetric> {
+  private toLinkedPost(metric: XPostMetric): XLinkedPost | null {
+    if (!metric.nostrEventId) {
+      return null;
+    }
+
+    return {
+      pubkey: metric.pubkey,
+      nostrEventId: metric.nostrEventId,
+      xPostId: metric.xPostId,
+      hasMedia: metric.hasMedia,
+      created: metric.created,
+      modified: metric.modified,
+      url: buildXPostUrl(metric.xPostId),
+    };
+  }
+
+  async recordPost(pubkey: string, xPostId: string, hasMedia: boolean, nostrEventId?: string): Promise<XPostMetric> {
     try {
       const created = now();
       const record = await this.prisma.xPostMetric.create({
         data: {
           pubkey,
+          nostrEventId,
           xPostId,
           hasMedia,
           created: BigInt(created),
@@ -44,6 +65,29 @@ class PrismaXPostRepository extends PrismaBaseRepository {
     } catch (error) {
       logger.error('Failed to record X post metric:', error);
       throw new Error(`Failed to record X post metric: ${(error as Error).message}`);
+    }
+  }
+
+  async getLinkedPost(pubkey: string, nostrEventId: string): Promise<XLinkedPost | null> {
+    try {
+      const record = await this.prisma.xPostMetric.findFirst({
+        where: {
+          pubkey,
+          nostrEventId,
+        },
+        orderBy: {
+          created: 'desc',
+        },
+      });
+
+      if (!record) {
+        return null;
+      }
+
+      return this.toLinkedPost(this.transformPrismaXPostMetric(record));
+    } catch (error) {
+      logger.error('Failed to get linked X post:', error);
+      throw new Error(`Failed to get linked X post: ${(error as Error).message}`);
     }
   }
 
