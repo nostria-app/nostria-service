@@ -17,6 +17,11 @@ type XStatus = {
   connected: boolean;
   username?: string;
   userId?: string;
+  totalPosts: number;
+  postsLast24h: number;
+  lastPosted?: number;
+  limit24h?: number;
+  remaining24h?: number;
 };
 
 type XPostResult = {
@@ -392,17 +397,31 @@ class XService {
 
   async getStatus(pubkey: string): Promise<XStatus> {
     try {
-      const settings = await this.userSettingsRepository.getUserSettings(pubkey);
+      const [settings, usageSummary] = await Promise.all([
+        this.userSettingsRepository.getUserSettings(pubkey),
+        this.xPostRepository.getUsageSummary(pubkey),
+      ]);
 
       return {
         connected: !!(settings?.xAccessToken && settings?.xAccessSecret),
         username: settings?.xUsername,
         userId: settings?.xUserId,
+        totalPosts: usageSummary.totalPosts,
+        postsLast24h: usageSummary.postsLast24h,
+        lastPosted: usageSummary.lastPosted,
+        limit24h: this.maxPostsPer24h > 0 ? this.maxPostsPer24h : undefined,
+        remaining24h: this.maxPostsPer24h > 0 ? Math.max(0, this.maxPostsPer24h - usageSummary.postsLast24h) : undefined,
       };
     } catch (error) {
       if (this.isMissingXColumnsError(error)) {
         logger.warn('X settings columns are not available yet; treating X as disconnected until migration is applied');
-        return { connected: false };
+        return {
+          connected: false,
+          totalPosts: 0,
+          postsLast24h: 0,
+          limit24h: this.maxPostsPer24h > 0 ? this.maxPostsPer24h : undefined,
+          remaining24h: this.maxPostsPer24h > 0 ? this.maxPostsPer24h : undefined,
+        };
       }
 
       throw error;
@@ -496,7 +515,15 @@ class XService {
 
   async disconnect(pubkey: string): Promise<XStatus> {
     await this.userSettingsRepository.disconnectXAccount(pubkey);
-    return { connected: false };
+    const usageSummary = await this.xPostRepository.getUsageSummary(pubkey);
+    return {
+      connected: false,
+      totalPosts: usageSummary.totalPosts,
+      postsLast24h: usageSummary.postsLast24h,
+      lastPosted: usageSummary.lastPosted,
+      limit24h: this.maxPostsPer24h > 0 ? this.maxPostsPer24h : undefined,
+      remaining24h: this.maxPostsPer24h > 0 ? Math.max(0, this.maxPostsPer24h - usageSummary.postsLast24h) : undefined,
+    };
   }
 
   async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
