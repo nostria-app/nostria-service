@@ -19,6 +19,7 @@ type XPostMediaRequest = {
 };
 
 const NOSTR_EVENT_ID_REGEX = /^[a-f0-9]{64}$/i;
+const X_POST_ID_REGEX = /^\d+$/;
 
 function ensureOwnPubkey(req: Request, res: Response): string | null {
   const authenticatedPubkey = (req as NIP98AuthenticatedRequest).authenticatedPubkey;
@@ -108,6 +109,34 @@ router.get('/post-link/:pubkey/:eventId', requireNIP98Auth, async (req: Request,
   } catch (error) {
     logger.error('Failed to get linked X post', error);
     res.status(500).json({ error: 'Failed to get linked X post' });
+  }
+});
+
+router.post('/post-link/:pubkey', requireNIP98Auth, async (req: Request, res: Response): Promise<void> => {
+  const pubkey = ensureOwnPubkey(req, res);
+  if (!pubkey) {
+    return;
+  }
+
+  const xPostId = typeof req.body?.xPostId === 'string' ? req.body.xPostId.trim() : '';
+  const nostrEventId = typeof req.body?.nostrEventId === 'string' ? req.body.nostrEventId.trim() : '';
+
+  if (!X_POST_ID_REGEX.test(xPostId)) {
+    res.status(400).json({ error: 'A valid X post id is required' });
+    return;
+  }
+
+  if (!NOSTR_EVENT_ID_REGEX.test(nostrEventId)) {
+    res.status(400).json({ error: 'A valid Nostr event id is required' });
+    return;
+  }
+
+  try {
+    const link = await xService.linkPostToNostrEvent(pubkey, xPostId, nostrEventId);
+    res.json({ success: true, data: link });
+  } catch (error) {
+    logger.error('Failed to link X post to Nostr event', error);
+    res.status(500).json({ error: 'Failed to link X post to Nostr event' });
   }
 });
 

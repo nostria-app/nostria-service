@@ -3,12 +3,12 @@ import crypto from 'crypto';
 import OAuth from 'oauth-1.0a';
 
 import RepositoryFactory from '../database/RepositoryFactory';
-import { XLinkedPost, XPostUsageSummary } from '../models/xPostMetric';
+import { XLinkedPost, XPostLinkResult, XPostUsageSummary } from '../models/xPostMetric';
 import logger from '../utils/logger';
 
 export class XPremiumRequiredError extends Error {
   constructor() {
-    super('X dual-posting requires an active premium subscription');
+    super('Post to X requires an active premium subscription');
     this.name = 'XPremiumRequiredError';
   }
 }
@@ -532,6 +532,10 @@ class XService {
 
   async getLinkedPost(pubkey: string, nostrEventId: string): Promise<XLinkedPost | null> {
     return this.xPostRepository.getLinkedPost(pubkey, nostrEventId);
+  }
+
+  async linkPostToNostrEvent(pubkey: string, xPostId: string, nostrEventId: string): Promise<XPostLinkResult> {
+    return this.xPostRepository.linkPostToNostrEvent(pubkey, xPostId, nostrEventId);
   }
 
   async createPost(pubkey: string, text: string, media: XMediaInput[] = [], nostrEventId?: string): Promise<XPostResult> {

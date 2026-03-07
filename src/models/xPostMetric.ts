@@ -25,3 +25,9 @@ export interface XPostUsageSummary {
   postsLast24h: number;
   lastPosted?: number;
 }
+
+export interface XPostLinkResult {
+  pubkey: string;
+  nostrEventId: string;
+  xPostId: string;
+}

@@ -1,4 +1,4 @@
-import { XLinkedPost, XPostMetric, XPostUsageSummary } from '../models/xPostMetric';
+import { XLinkedPost, XPostLinkResult, XPostMetric, XPostUsageSummary } from '../models/xPostMetric';
 import { now } from '../helpers/now';
 import { PrismaBaseRepository } from './PrismaBaseRepository';
 import logger from '../utils/logger';
@@ -88,6 +88,30 @@ class PrismaXPostRepository extends PrismaBaseRepository {
     } catch (error) {
       logger.error('Failed to get linked X post:', error);
       throw new Error(`Failed to get linked X post: ${(error as Error).message}`);
+    }
+  }
+
+  async linkPostToNostrEvent(pubkey: string, xPostId: string, nostrEventId: string): Promise<XPostLinkResult> {
+    try {
+      const record = await this.prisma.xPostMetric.update({
+        where: {
+          xPostId,
+        },
+        data: {
+          pubkey,
+          nostrEventId,
+          modified: BigInt(now()),
+        },
+      });
+
+      return {
+        pubkey: record.pubkey,
+        nostrEventId: record.nostrEventId || nostrEventId,
+        xPostId: record.xPostId,
+      };
+    } catch (error) {
+      logger.error('Failed to link X post to Nostr event:', error);
+      throw new Error(`Failed to link X post to Nostr event: ${(error as Error).message}`);
     }
   }
 
