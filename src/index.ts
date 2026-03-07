@@ -1,11 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { execFile } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import fs from 'fs';
+import { promisify } from 'util';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
 import PrismaClientSingleton from './database/prismaClient';
@@ -34,12 +36,42 @@ import NostrZapService from './services/NostrZapService';
 
 // Initialize Nostr Zap Service
 const nostrZapService = new NostrZapService();
+const execFileAsync = promisify(execFile);
+
+async function runProductionDatabaseInitialization(): Promise<void> {
+  if (process.env.NODE_ENV !== 'production' || !process.env.DATABASE_URL) {
+    return;
+  }
+
+  const prismaCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+
+  logger.info('Running Prisma migrations for production startup...');
+
+  try {
+    const result = await execFileAsync(prismaCommand, ['prisma', 'migrate', 'deploy'], {
+      env: process.env,
+    });
+
+    if (result.stdout) {
+      logger.info(result.stdout.trim());
+    }
+    if (result.stderr) {
+      logger.warn(result.stderr.trim());
+    }
+
+    logger.info('Prisma migrations completed successfully');
+  } catch (error) {
+    logger.error('Failed to run Prisma migrations during production startup:', error);
+    throw error;
+  }
+}
 
 // Database initialization function
 async function initializeDatabases(): Promise<void> {
   logger.info('Initializing PostgreSQL database connection...');
   
   try {
+    await runProductionDatabaseInitialization();
     await PrismaClientSingleton.connect();
     const isHealthy = await RepositoryFactory.checkPostgresHealth();
     if (isHealthy) {
