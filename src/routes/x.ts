@@ -8,6 +8,12 @@ import logger from '../utils/logger';
 const router = express.Router();
 const xService = new XService();
 
+type XPostMediaRequest = {
+  url: string;
+  mimeType?: string;
+  fallbackUrls?: string[];
+};
+
 function ensureOwnPubkey(req: Request, res: Response): string | null {
   const authenticatedPubkey = (req as NIP98AuthenticatedRequest).authenticatedPubkey;
   const { pubkey } = req.params;
@@ -86,8 +92,19 @@ router.post('/post/:pubkey', requireNIP98Auth, async (req: Request, res: Respons
     return;
   }
 
+  const media = Array.isArray(req.body?.media)
+    ? req.body.media.filter((item: unknown): item is XPostMediaRequest => {
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+
+      const candidate = item as XPostMediaRequest;
+      return typeof candidate.url === 'string' && candidate.url.length > 0;
+    })
+    : [];
+
   try {
-    const post = await xService.createPost(pubkey, text);
+    const post = await xService.createPost(pubkey, text, media);
     res.status(201).json({ success: true, data: post });
   } catch (error) {
     logger.error('Failed to create X post', error);

@@ -16,6 +16,30 @@ type XPostResult = {
   text: string;
 };
 
+type XMediaInput = {
+  url: string;
+  mimeType?: string;
+  fallbackUrls?: string[];
+};
+
+type XMediaUploadResponse = {
+  data?: {
+    id: string;
+    media_key?: string;
+    expires_after_secs?: number;
+    size?: number;
+    processing_info?: {
+      state: 'pending' | 'in_progress' | 'succeeded' | 'failed';
+      check_after_secs?: number;
+      progress_percent?: number;
+      error?: {
+        name?: string;
+        message?: string;
+      };
+    };
+  };
+};
+
 type OAuthToken = {
   key: string;
   secret: string;
@@ -96,8 +120,8 @@ class XService {
 
   private async signedJsonRequest<T>(
     url: string,
-    method: 'POST',
-    body: Record<string, unknown>,
+    method: 'POST' | 'GET',
+    body: Record<string, unknown> | undefined,
     token: OAuthToken
   ): Promise<T> {
     const requestData = { url, method };
@@ -110,7 +134,7 @@ class XService {
         ...headers,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: body ? JSON.stringify(body) : undefined,
     });
 
     const responseText = await response.text();
@@ -119,6 +143,191 @@ class XService {
     }
 
     return JSON.parse(responseText) as T;
+  }
+
+  private async signedMultipartRequest<T>(
+    url: string,
+    method: 'POST',
+    formData: FormData,
+    token: OAuthToken
+  ): Promise<T> {
+    const requestData = { url, method };
+    const authData = this.oauth.authorize(requestData, token);
+    const headers = this.oauth.toHeader(authData) as unknown as Record<string, string>;
+
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: formData,
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error(`X multipart request failed: ${response.status} ${responseText}`);
+    }
+
+    if (!responseText) {
+      return {} as T;
+    }
+
+    return JSON.parse(responseText) as T;
+  }
+
+  private normalizeMimeType(mimeType?: string): string {
+    if (!mimeType) {
+      return 'application/octet-stream';
+    }
+
+    return mimeType.split(';')[0].trim().toLowerCase();
+  }
+
+  private getMediaCategory(mimeType: string): 'tweet_image' | 'tweet_video' | 'tweet_gif' {
+    if (mimeType.startsWith('video/')) {
+      return 'tweet_video';
+    }
+
+    if (mimeType === 'image/gif') {
+      return 'tweet_gif';
+    }
+
+    if (mimeType.startsWith('image/')) {
+      return 'tweet_image';
+    }
+
+    throw new Error(`Unsupported media type for X posting: ${mimeType}`);
+  }
+
+  private validateMediaInputs(media: XMediaInput[]): void {
+    if (media.length === 0) {
+      return;
+    }
+
+    const categories = media.map(item => this.getMediaCategory(this.normalizeMimeType(item.mimeType)));
+    const hasNonImage = categories.some(category => category !== 'tweet_image');
+
+    if (hasNonImage && media.length > 1) {
+      throw new Error('X supports either up to 4 images or a single video/GIF per post');
+    }
+
+    if (!hasNonImage && media.length > 4) {
+      throw new Error('X supports at most 4 images per post');
+    }
+
+    if (hasNonImage && categories.some(category => category === 'tweet_image')) {
+      throw new Error('X does not allow mixing images with video or GIF in the same post');
+    }
+  }
+
+  private async downloadMedia(media: XMediaInput): Promise<{ buffer: Buffer; mimeType: string }> {
+    const urls = [media.url, ...(media.fallbackUrls || [])].filter(Boolean);
+    let lastError: Error | null = null;
+
+    for (const url of urls) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const mimeType = this.normalizeMimeType(media.mimeType || response.headers.get('content-type') || undefined);
+
+        return {
+          buffer: Buffer.from(arrayBuffer),
+          mimeType,
+        };
+      } catch (error) {
+        lastError = error as Error;
+      }
+    }
+
+    throw new Error(`Failed to download media for X upload: ${lastError?.message || 'Unknown error'}`);
+  }
+
+  private async waitForProcessing(mediaId: string, token: OAuthToken): Promise<void> {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const statusResponse = await this.signedJsonRequest<XMediaUploadResponse>(
+        `https://api.x.com/2/media/upload?command=STATUS&media_id=${encodeURIComponent(mediaId)}`,
+        'GET',
+        undefined,
+        token
+      );
+
+      const processingInfo = statusResponse.data?.processing_info;
+      if (!processingInfo || processingInfo.state === 'succeeded') {
+        return;
+      }
+
+      if (processingInfo.state === 'failed') {
+        throw new Error(processingInfo.error?.message || 'X media processing failed');
+      }
+
+      const waitSeconds = processingInfo.check_after_secs ?? 1;
+      await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+    }
+
+    throw new Error('Timed out waiting for X media processing to finish');
+  }
+
+  private async uploadMediaItem(media: XMediaInput, token: OAuthToken): Promise<string> {
+    const downloadedMedia = await this.downloadMedia(media);
+    const mediaCategory = this.getMediaCategory(downloadedMedia.mimeType);
+
+    const initializeResponse = await this.signedJsonRequest<XMediaUploadResponse>(
+      'https://api.x.com/2/media/upload/initialize',
+      'POST',
+      {
+        media_category: mediaCategory,
+        media_type: downloadedMedia.mimeType,
+        total_bytes: downloadedMedia.buffer.byteLength,
+        shared: false,
+      },
+      token
+    );
+
+    const mediaId = initializeResponse.data?.id;
+    if (!mediaId) {
+      throw new Error('X media upload initialization failed');
+    }
+
+    const chunkSize = 4 * 1024 * 1024;
+    for (let offset = 0, segmentIndex = 0; offset < downloadedMedia.buffer.length; offset += chunkSize, segmentIndex += 1) {
+      const chunk = downloadedMedia.buffer.subarray(offset, offset + chunkSize);
+      const formData = new FormData();
+      formData.set('segment_index', segmentIndex.toString());
+      formData.set('media', new Blob([chunk], { type: downloadedMedia.mimeType }), `chunk-${segmentIndex}`);
+
+      await this.signedMultipartRequest(
+        `https://api.x.com/2/media/upload/${encodeURIComponent(mediaId)}/append`,
+        'POST',
+        formData,
+        token
+      );
+    }
+
+    const finalizeResponse = await this.signedJsonRequest<XMediaUploadResponse>(
+      `https://api.x.com/2/media/upload/${encodeURIComponent(mediaId)}/finalize`,
+      'POST',
+      undefined,
+      token
+    );
+
+    if (finalizeResponse.data?.processing_info) {
+      await this.waitForProcessing(mediaId, token);
+    }
+
+    return mediaId;
+  }
+
+  private async uploadMedia(media: XMediaInput[], token: OAuthToken): Promise<string[]> {
+    this.validateMediaInputs(media);
+
+    const mediaIds: string[] = [];
+    for (const item of media) {
+      mediaIds.push(await this.uploadMediaItem(item, token));
+    }
+
+    return mediaIds;
   }
 
   private buildAppRedirect(status: 'success' | 'cancelled' | 'error', pubkey?: string, message?: string): string {
@@ -233,7 +442,7 @@ class XService {
     return { connected: false };
   }
 
-  async createPost(pubkey: string, text: string): Promise<XPostResult> {
+  async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
     this.assertConfigured();
 
     const settings = await this.userSettingsRepository.getUserSettings(pubkey);
@@ -241,18 +450,28 @@ class XService {
       throw new Error('No connected X account found for this user');
     }
 
-    const payload = {
+    const token = {
+      key: this.decrypt(settings.xAccessToken),
+      secret: this.decrypt(settings.xAccessSecret),
+    };
+
+    const mediaIds = media.length > 0 ? await this.uploadMedia(media, token) : [];
+
+    const payload: Record<string, unknown> = {
       text,
     };
+
+    if (mediaIds.length > 0) {
+      payload.media = {
+        media_ids: mediaIds,
+      };
+    }
 
     const response = await this.signedJsonRequest<{ data?: { id: string; text: string } }>(
       'https://api.x.com/2/tweets',
       'POST',
       payload,
-      {
-        key: this.decrypt(settings.xAccessToken),
-        secret: this.decrypt(settings.xAccessSecret),
-      }
+      token
     );
 
     if (!response.data?.id || !response.data.text) {
