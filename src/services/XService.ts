@@ -14,7 +14,6 @@ export class XPremiumRequiredError extends Error {
 
 type XStatus = {
   connected: boolean;
-  premiumEligible: boolean;
   username?: string;
   userId?: string;
 };
@@ -86,6 +85,20 @@ class XService {
     if (!hasPremiumSubscription) {
       throw new XPremiumRequiredError();
     }
+  }
+
+  private isMissingXColumnsError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    return error.message.includes('user_settings.xUserId')
+      || error.message.includes('user_settings.xUsername')
+      || error.message.includes('user_settings.xAccessToken')
+      || error.message.includes('user_settings.xAccessSecret')
+      || error.message.includes('user_settings.xRequestToken')
+      || error.message.includes('user_settings.xRequestSecret')
+      || error.message.includes('user_settings.xRequestCreated');
   }
 
   private encrypt(value: string): string {
@@ -365,15 +378,22 @@ class XService {
   }
 
   async getStatus(pubkey: string): Promise<XStatus> {
-    const premiumEligible = await this.accountRepository.hasPremiumSubscription(pubkey);
-    const settings = await this.userSettingsRepository.getUserSettings(pubkey);
+    try {
+      const settings = await this.userSettingsRepository.getUserSettings(pubkey);
 
-    return {
-      connected: !!(settings?.xAccessToken && settings?.xAccessSecret),
-      premiumEligible,
-      username: settings?.xUsername,
-      userId: settings?.xUserId,
-    };
+      return {
+        connected: !!(settings?.xAccessToken && settings?.xAccessSecret),
+        username: settings?.xUsername,
+        userId: settings?.xUserId,
+      };
+    } catch (error) {
+      if (this.isMissingXColumnsError(error)) {
+        logger.warn('X settings columns are not available yet; treating X as disconnected until migration is applied');
+        return { connected: false };
+      }
+
+      throw error;
+    }
   }
 
   async startAuthorization(pubkey: string): Promise<string> {
@@ -463,8 +483,7 @@ class XService {
 
   async disconnect(pubkey: string): Promise<XStatus> {
     await this.userSettingsRepository.disconnectXAccount(pubkey);
-    const premiumEligible = await this.accountRepository.hasPremiumSubscription(pubkey);
-    return { connected: false, premiumEligible };
+    return { connected: false };
   }
 
   async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
