@@ -2,11 +2,15 @@ import express, { Request, Response } from 'express';
 
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import { NIP98AuthenticatedRequest } from './types';
-import XService from '../services/XService';
+import XService, { XPremiumRequiredError } from '../services/XService';
 import logger from '../utils/logger';
 
 const router = express.Router();
 const xService = new XService();
+
+function isPremiumRequiredError(error: unknown): error is XPremiumRequiredError {
+  return error instanceof XPremiumRequiredError;
+}
 
 type XPostMediaRequest = {
   url: string;
@@ -61,6 +65,10 @@ router.post('/connect/:pubkey', requireNIP98Auth, async (req: Request, res: Resp
     res.json({ success: true, data: { authorizeUrl } });
   } catch (error) {
     logger.error('Failed to start X authorization', error);
+    if (isPremiumRequiredError(error)) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: 'Failed to start X authorization', message: (error as Error).message });
   }
 });
@@ -108,6 +116,10 @@ router.post('/post/:pubkey', requireNIP98Auth, async (req: Request, res: Respons
     res.status(201).json({ success: true, data: post });
   } catch (error) {
     logger.error('Failed to create X post', error);
+    if (isPremiumRequiredError(error)) {
+      res.status(403).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: 'Failed to create X post', message: (error as Error).message });
   }
 });

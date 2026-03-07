@@ -5,8 +5,16 @@ import OAuth from 'oauth-1.0a';
 import RepositoryFactory from '../database/RepositoryFactory';
 import logger from '../utils/logger';
 
+export class XPremiumRequiredError extends Error {
+  constructor() {
+    super('X dual-posting requires an active premium subscription');
+    this.name = 'XPremiumRequiredError';
+  }
+}
+
 type XStatus = {
   connected: boolean;
+  premiumEligible: boolean;
   username?: string;
   userId?: string;
 };
@@ -45,12 +53,16 @@ type OAuthToken = {
   secret: string;
 };
 
+const DEFAULT_X_CALLBACK_URL = 'https://api.nostria.app/api/x/callback';
+const DEFAULT_NOSTRIA_APP_URL = 'https://nostria.app/';
+
 class XService {
   private readonly userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+  private readonly accountRepository = RepositoryFactory.getAccountRepository();
   private readonly consumerKey = process.env.X_CONSUMER_KEY || process.env.X_CONSUMER_API_KEY || '';
   private readonly consumerSecret = process.env.X_CONSUMER_SECRET || process.env.X_CONSUMER_API_SECRET || '';
-  private readonly callbackUrl = process.env.X_CALLBACK_URL || '';
-  private readonly appUrl = process.env.NOSTRIA_APP_URL || 'https://nostria.app/';
+  private readonly callbackUrl = process.env.X_CALLBACK_URL || DEFAULT_X_CALLBACK_URL;
+  private readonly appUrl = process.env.NOSTRIA_APP_URL || DEFAULT_NOSTRIA_APP_URL;
   private readonly encryptionSecret = process.env.X_TOKEN_ENCRYPTION_SECRET || '';
   private readonly oauth = new OAuth({
     consumer: {
@@ -66,6 +78,13 @@ class XService {
   private assertConfigured(): void {
     if (!this.consumerKey || !this.consumerSecret || !this.callbackUrl || !this.encryptionSecret) {
       throw new Error('X integration is not fully configured on the server');
+    }
+  }
+
+  private async assertPremiumAccess(pubkey: string): Promise<void> {
+    const hasPremiumSubscription = await this.accountRepository.hasPremiumSubscription(pubkey);
+    if (!hasPremiumSubscription) {
+      throw new XPremiumRequiredError();
     }
   }
 
@@ -346,10 +365,12 @@ class XService {
   }
 
   async getStatus(pubkey: string): Promise<XStatus> {
+    const premiumEligible = await this.accountRepository.hasPremiumSubscription(pubkey);
     const settings = await this.userSettingsRepository.getUserSettings(pubkey);
 
     return {
       connected: !!(settings?.xAccessToken && settings?.xAccessSecret),
+      premiumEligible,
       username: settings?.xUsername,
       userId: settings?.xUserId,
     };
@@ -357,6 +378,7 @@ class XService {
 
   async startAuthorization(pubkey: string): Promise<string> {
     this.assertConfigured();
+    await this.assertPremiumAccess(pubkey);
 
     const responseText = await this.signedFormRequest(
       'https://api.x.com/oauth/request_token',
@@ -402,6 +424,8 @@ class XService {
     }
 
     try {
+      await this.assertPremiumAccess(settings.pubkey);
+
       const responseText = await this.signedFormRequest(
         'https://api.x.com/oauth/access_token',
         'POST',
@@ -439,11 +463,13 @@ class XService {
 
   async disconnect(pubkey: string): Promise<XStatus> {
     await this.userSettingsRepository.disconnectXAccount(pubkey);
-    return { connected: false };
+    const premiumEligible = await this.accountRepository.hasPremiumSubscription(pubkey);
+    return { connected: false, premiumEligible };
   }
 
   async createPost(pubkey: string, text: string, media: XMediaInput[] = []): Promise<XPostResult> {
     this.assertConfigured();
+    await this.assertPremiumAccess(pubkey);
 
     const settings = await this.userSettingsRepository.getUserSettings(pubkey);
     if (!settings?.xAccessToken || !settings?.xAccessSecret) {
