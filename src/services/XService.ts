@@ -74,7 +74,7 @@ class XService {
   private readonly callbackUrl = process.env.X_CALLBACK_URL || DEFAULT_X_CALLBACK_URL;
   private readonly appUrl = process.env.NOSTRIA_APP_URL || DEFAULT_NOSTRIA_APP_URL;
   private readonly encryptionSecret = process.env.X_TOKEN_ENCRYPTION_SECRET || '';
-  private readonly maxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '12', 10) || 12);
+  private readonly maxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '6', 10) || 6);
   private readonly oauth = new OAuth({
     consumer: {
       key: this.consumerKey,
