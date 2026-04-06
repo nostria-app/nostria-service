@@ -8,7 +8,7 @@ import logger from '../utils/logger';
 
 export class XPremiumRequiredError extends Error {
   constructor() {
-    super('Post to X requires an active premium subscription');
+    super('Post to X requires an active Premium+ subscription');
     this.name = 'XPremiumRequiredError';
   }
 }
@@ -93,8 +93,11 @@ class XService {
   }
 
   private async assertPremiumAccess(pubkey: string): Promise<void> {
-    const hasPremiumSubscription = await this.accountRepository.hasPremiumSubscription(pubkey);
-    if (!hasPremiumSubscription) {
+    const account = await this.accountRepository.getByPubkey(pubkey);
+    const hasXPostingEntitlement = account?.subscription?.entitlements?.features?.includes('DUAL_POST_X_10');
+    const isNotExpired = !!account && (!account.expires || account.expires > Date.now());
+
+    if (!account || !hasXPostingEntitlement || !isNotExpired) {
       throw new XPremiumRequiredError();
     }
   }
