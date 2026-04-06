@@ -122,8 +122,7 @@ const mockXPostRepository = xPostRepository as jest.Mocked<typeof xPostRepositor
 // Helper function to generate admin NIP-98 token
 const generateAdminNIP98 = async (method = 'GET', url = '/api/account/list'): Promise<NIP98Fixture> => {
   const keyPair = generateKeyPair();
-  // Use the admin pubkey from mocked config
-  keyPair.pubkey = 'test_admin_pubkey';
+  (config as typeof config & { admin: { pubkeys: string[] } }).admin.pubkeys = [keyPair.pubkey];
   const token = await nip98.getToken(`http://localhost:3000${url}`, method, e => finalizeEvent(e, keyPair.privateKey));
   return {
     ...keyPair,
@@ -342,8 +341,8 @@ describe('Account API', () => {
 
     test('should return 400 if username is too short', async () => {
       await request(app).post('/api/account')
-        .send({ pubkey: account.pubkey, username: 'oi' })
-        .expect(400, { error: 'Username must be at least 3 characters' });
+        .send({ pubkey: account.pubkey, username: 'o' })
+        .expect(400, { error: 'Username must be at least 2 characters' });
     });
     
     test('should return 400 if username is reserved', async () => {
@@ -607,7 +606,7 @@ describe('Account API', () => {
     });
 
     it('should deny access for non-admin users', async () => {
-      const testAuth = await generateNIP98();
+      const testAuth = await generateNIP98('GET', '/api/account/list');
 
       const response = await request(app)
         .get('/api/account/list')
@@ -626,7 +625,7 @@ describe('Account API', () => {
     });
 
     it('should accept custom limit parameter', async () => {
-      const testAuth = await generateAdminNIP98();
+      const testAuth = await generateAdminNIP98('GET', '/api/account/list?limit=50');
       const mockAccounts: any[] = [];
       
       mockAccountRepository.getAllAccounts.mockResolvedValue(mockAccounts);
@@ -640,7 +639,7 @@ describe('Account API', () => {
     });
 
     it('should validate limit parameter bounds', async () => {
-      const testAuth = await generateAdminNIP98();
+      const testAuth = await generateAdminNIP98('GET', '/api/account/list?limit=2000');
 
       const response = await request(app)
         .get('/api/account/list?limit=2000')
@@ -713,8 +712,8 @@ describe('Account API', () => {
           totalPosts: 7,
           postsLast24h: 2,
           lastPosted: expect.any(Number),
-          limit24h: undefined,
-          remaining24h: undefined,
+          limit24h: 12,
+          remaining24h: 10,
         },
       });
     });
@@ -724,7 +723,7 @@ describe('Account API', () => {
     let testAuth: NIP98Fixture;
 
     beforeEach(async () => {
-      testAuth = await generateNIP98('POST');
+      testAuth = await generateNIP98('POST', '/api/account/renew');
     });
 
     test('should return 401 if not authenticated', async () => {
@@ -921,7 +920,7 @@ describe('Account API', () => {
     let testAuth: NIP98Fixture;
 
     beforeEach(async () => {
-      testAuth = await generateNIP98('GET');
+      testAuth = await generateNIP98('GET', '/api/account/subscription-history');
     });
 
     test('should return 401 if not authenticated', async () => {
@@ -975,25 +974,27 @@ describe('Account API', () => {
     });
 
     test('should respect limit parameter', async () => {
+      const testAuthWithQuery = await generateNIP98('GET', '/api/account/subscription-history?limit=25');
       mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([]);
 
       await request(app)
         .get('/api/account/subscription-history?limit=25')
-        .set('Authorization', `Nostr ${testAuth.token}`)
+        .set('Authorization', `Nostr ${testAuthWithQuery.token}`)
         .expect(200);
 
-      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 25);
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuthWithQuery.pubkey, 25);
     });
 
     test('should cap limit at 100', async () => {
+      const testAuthWithQuery = await generateNIP98('GET', '/api/account/subscription-history?limit=500');
       mockPaymentRepository.getPaymentsByPubkey.mockResolvedValueOnce([]);
 
       await request(app)
         .get('/api/account/subscription-history?limit=500')
-        .set('Authorization', `Nostr ${testAuth.token}`)
+        .set('Authorization', `Nostr ${testAuthWithQuery.token}`)
         .expect(200);
 
-      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuth.pubkey, 100);
+      expect(mockPaymentRepository.getPaymentsByPubkey).toHaveBeenCalledWith(testAuthWithQuery.pubkey, 100);
     });
 
     test('should handle server errors gracefully', async () => {
@@ -1174,8 +1175,8 @@ describe('Account API', () => {
     });
 
     it('should deny access for non-admin users', async () => {
-      const testAuth = await generateNIP98('POST');
       const pubkey = 'a'.repeat(64);
+      const testAuth = await generateNIP98('POST', `/api/account/${pubkey}/extend`);
 
       const response = await request(app)
         .post(`/api/account/${pubkey}/extend`)

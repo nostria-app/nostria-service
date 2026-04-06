@@ -10,9 +10,9 @@ export type NIP98Fixture = {
   pubkey: string;
 }
 
-export const generateNIP98 = async (method = 'GET'): Promise<NIP98Fixture> => {
+export const generateNIP98 = async (method = 'GET', url = '/api/account'): Promise<NIP98Fixture> => {
   const keyPair = generateKeyPair()
-  const token = await nip98.getToken('http://localhost:3000/api/account', method, e => finalizeEvent(e, keyPair.privateKey))
+  const token = await nip98.getToken(`http://localhost:3000${url}`, method, e => finalizeEvent(e, keyPair.privateKey))
   return {
     ...keyPair,
     token,
