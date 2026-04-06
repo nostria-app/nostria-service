@@ -38,7 +38,7 @@ type PaymentStatus = 'pending' | 'expired' | 'paid';
  *       properties:
  *         tierName:
  *           type: string
- *           enum: [free, premium, premium_plus]
+ *           enum: [free, basic, premium, premium_plus]
  *           description: Subscription tier name
  *         billingCycle:
  *           type: string
@@ -99,7 +99,7 @@ interface CreatePaymentRequest {
  *           description: Lightning amount in satoshis
  *         tier:
  *           type: string
- *           enum: [free, premium, premium_plus]
+ *           enum: [free, basic, premium, premium_plus]
  *           description: Subscription tier
  *         billingCycle:
  *           type: string
@@ -498,7 +498,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           description: Payment ID
  *         tier:
  *           type: string
- *           enum: [free, premium, premium_plus]
+ *           enum: [free, basic, premium, premium_plus]
  *           description: Subscription tier purchased
  *         billingCycle:
  *           type: string

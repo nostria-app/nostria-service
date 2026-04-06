@@ -285,12 +285,16 @@ const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, 
  *         - BASIC_WEBPUSH
  *         - COMMUNITY_SUPPORT
  *         - USERNAME
- *         - ADVANCED_FILTERING
- *         - PRIORITY_SUPPORT
- *         - CUSTOM_TEMPLATES
- *         - API_ACCESS
- *         - WEBHOOK
+ *         - NEWSLETTER
+ *         - STORAGE_1GB
+ *         - STORAGE_5GB
+ *         - STORAGE_50GB
+ *         - DUAL_POST_X_10
  *         - ANALYTICS
+ *         - CLOUD_BACKUP_COMING_SOON
+ *         - MEMOS
+ *         - YOUTUBE
+ *         - EXTRA_BACKUP_FEATURES
  *     FeatureWithLabel:
  *       type: object
  *       required:  # List the required properties here
@@ -333,7 +337,7 @@ const toAccountDto = ({ pubkey, username, created, tier, expires, subscription, 
  *             $ref: '#/components/schemas/FeatureWithLabel'
  *     Tier:
  *       type: string
- *       enum: [free, premium, premium_plus]
+ *       enum: [free, basic, premium, premium_plus]
  *     TierDetails:
  *       type: object
  *       required:
@@ -670,11 +674,12 @@ router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: Renew
     };
 
     // Determine if tier should be upgraded
-    // premium_plus > premium > free
+    // premium_plus > premium > basic > free
     const tierPriority: Record<Tier, number> = {
       'free': 0,
-      'premium': 1,
-      'premium_plus': 2,
+      'basic': 1,
+      'premium': 2,
+      'premium_plus': 3,
     };
 
     const paymentTier = payment.tier as Tier;
@@ -714,7 +719,7 @@ router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: Renew
  *           description: Payment ID associated with this subscription event
  *         tier:
  *           type: string
- *           enum: [free, premium, premium_plus]
+ *           enum: [free, basic, premium, premium_plus]
  *           description: Subscription tier
  *         billingCycle:
  *           type: string

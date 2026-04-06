@@ -46,6 +46,23 @@ Happy holidays!`;
       });
     });
 
+    it('should parse basic subscription', () => {
+      const content = `🎁 Nostria Premium Gift
+d1bd33333733dcc411f0ee893b38b8522fc0de227fff459d99044ced9e65581b
+basic
+1
+Welcome!`;
+
+      const result = (service as any).parseZapContent(content);
+
+      expect(result).toEqual({
+        recipientPubkey: 'd1bd33333733dcc411f0ee893b38b8522fc0de227fff459d99044ced9e65581b',
+        subscriptionType: 'basic',
+        months: 1,
+        message: 'Welcome!'
+      });
+    });
+
     it('should reject invalid pubkey format', () => {
       const content = `🎁 Nostria Premium Gift
 invalid_pubkey
@@ -118,6 +135,7 @@ Line 3`;
       // Mock the lightning service
       const mockBtcRate = 100000; // $100,000 per BTC
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
       // 1 month premium = $10 = 1000 cents
       // 1 BTC = $100,000 = 10,000,000 cents
@@ -128,18 +146,30 @@ Line 3`;
       expect(result.isValid).toBe(true);
     });
 
+    it('should validate correct basic monthly payment with real BTC price', async () => {
+      const mockBtcRate = 100000;
+      (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
+
+      // 1 month basic = $5 = 500 cents = 5,000 sats
+      const result = await (service as any).validatePaymentAmount('basic', 1, 5000);
+      expect(result.isValid).toBe(true);
+    });
+
     it('should validate correct premium_plus monthly payment with real BTC price', async () => {
       const mockBtcRate = 100000;
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
-      // 1 month premium_plus = $25 = 2500 cents = 25,000 sats
-      const result = await (service as any).validatePaymentAmount('premium-plus', 1, 25000);
+      // 1 month premium_plus = $45 = 4500 cents = 45,000 sats
+      const result = await (service as any).validatePaymentAmount('premium-plus', 1, 45000);
       expect(result.isValid).toBe(true);
     });
 
     it('should validate multiple months', async () => {
       const mockBtcRate = 100000;
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
       // 3 months premium = $30 = 3000 cents = 30,000 sats
       const result = await (service as any).validatePaymentAmount('premium', 3, 30000);
@@ -149,6 +179,7 @@ Line 3`;
     it('should accept payment within 10% tolerance', async () => {
       const mockBtcRate = 100000;
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
       // 1 month premium = $10 = 10,000 sats
       // 90% of 10,000 = 9,000 sats (minimum acceptable)
@@ -159,6 +190,7 @@ Line 3`;
     it('should reject payment below tolerance', async () => {
       const mockBtcRate = 100000;
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
       // 1 month premium = $10 = 10,000 sats
       // Below 90% tolerance
@@ -170,6 +202,7 @@ Line 3`;
     it('should adjust for different BTC prices', async () => {
       const mockBtcRate = 50000; // $50,000 per BTC (half price)
       (service as any).btcUsdRate = mockBtcRate;
+      (service as any).lastBtcUpdate = Date.now();
       
       // 1 month premium = $10 = 1000 cents
       // At $50k/BTC: 1 sat = 0.05 cents

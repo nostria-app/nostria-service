@@ -169,8 +169,11 @@ class PrismaAccountRepository extends PrismaBaseRepository {
         return false;
       }
 
-      // Check if user has premium or premium_plus tier and subscription is not expired
-      const isPremiumTier = account.tier === 'premium' || account.tier === 'premium_plus';
+      // Check if user has a paid tier and the subscription is not expired
+      const isPremiumTier =
+        account.tier === 'basic' ||
+        account.tier === 'premium' ||
+        account.tier === 'premium_plus';
       const isNotExpired = !account.expires || account.expires > now();
 
       return isPremiumTier && isNotExpired;

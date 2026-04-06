@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 import { SimplePool, Filter, Event, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
 import config from '../config';
 import { Tier } from '../config/types';
@@ -15,7 +17,7 @@ const NOSTRIA_PREMIUM_PUBKEY = '3e5b8d197f4a9279278fd61d9d033058e13d62f6652e3f86
 
 interface ZapRequestContent {
   recipientPubkey: string;
-  subscriptionType: 'premium' | 'premium-plus';
+  subscriptionType: 'basic' | 'premium' | 'premium-plus';
   months: number;
   message?: string;
 }
@@ -31,6 +33,8 @@ interface ParsedZapRequest {
 }
 
 class NostrZapService {
+  private static readonly RECENT_EVENT_TTL_MS = 60 * 60 * 1000;
+
   private pool: SimplePool;
   private relays: string[];
   private accountRepository = RepositoryFactory.getAccountRepository();
@@ -38,6 +42,8 @@ class NostrZapService {
   private isRunning = false;
   private btcUsdRate: number | null = null;
   private lastBtcUpdate: number = 0;
+  private processingEventIds = new Set<string>();
+  private recentProcessedEvents = new Map<string, number>();
 
   constructor() {
     this.pool = new SimplePool();
@@ -150,14 +156,28 @@ class NostrZapService {
   private async handleZapEvent(event: Event): Promise<void> {
     logger.info(`Received zap receipt event ${event.id} from ${event.pubkey}`);
 
-    // Check if we've already processed this event
-    const alreadyProcessed = await this.isEventProcessed(event.id);
-    if (alreadyProcessed) {
-      logger.info(`Zap event ${event.id} already processed, skipping`);
+    this.pruneRecentProcessedEvents();
+
+    if (this.processingEventIds.has(event.id)) {
+      logger.info(`Zap event ${event.id} is already being processed, skipping duplicate delivery`);
       return;
     }
 
+    if (this.recentProcessedEvents.has(event.id)) {
+      logger.info(`Zap event ${event.id} was recently processed in-memory, skipping`);
+      return;
+    }
+
+    this.processingEventIds.add(event.id);
+
     try {
+      // Check if we've already processed this event
+      const alreadyProcessed = await this.isEventProcessed(event.id);
+      if (alreadyProcessed) {
+        logger.info(`Zap event ${event.id} already processed, skipping`);
+        return;
+      }
+
       // Extract bolt11 invoice and description from tags
       const bolt11Tag = event.tags.find(tag => tag[0] === 'bolt11');
       const descriptionTag = event.tags.find(tag => tag[0] === 'description');
@@ -213,6 +233,8 @@ class NostrZapService {
 
     } catch (error) {
       logger.error(`Error processing zap event ${event.id}:`, error);
+    } finally {
+      this.processingEventIds.delete(event.id);
     }
   }
 
@@ -464,7 +486,11 @@ class NostrZapService {
       }
 
       // Validate subscription type
-      if (subscriptionType !== 'premium' && subscriptionType !== 'premium-plus') {
+      if (
+        subscriptionType !== 'basic' &&
+        subscriptionType !== 'premium' &&
+        subscriptionType !== 'premium-plus'
+      ) {
         logger.warn(`Invalid subscription type: ${subscriptionType}`);
         return null;
       }
@@ -477,7 +503,7 @@ class NostrZapService {
 
       return {
         recipientPubkey: recipientPubkey.toLowerCase(),
-        subscriptionType: subscriptionType as 'premium' | 'premium-plus',
+        subscriptionType: subscriptionType as 'basic' | 'premium' | 'premium-plus',
         months,
         message: lines.length > 4 ? lines.slice(4).join('\n') : undefined
       };
@@ -516,11 +542,15 @@ class NostrZapService {
    * Validate that the payment amount is sufficient for the subscription
    */
   private async validatePaymentAmount(
-    subscriptionType: 'premium' | 'premium-plus',
+    subscriptionType: 'basic' | 'premium' | 'premium-plus',
     months: number,
     amountSats: number
   ): Promise<{ isValid: boolean; message?: string }> {
-    const tier = subscriptionType === 'premium' ? 'premium' : 'premium_plus';
+    const tier = subscriptionType === 'basic'
+      ? 'basic'
+      : subscriptionType === 'premium'
+        ? 'premium'
+        : 'premium_plus';
     const tierConfig = config.tiers[tier];
 
     if (!tierConfig.pricing) {
@@ -573,7 +603,7 @@ class NostrZapService {
    */
   private async activateSubscription(
     pubkey: string,
-    subscriptionType: 'premium' | 'premium-plus',
+    subscriptionType: 'basic' | 'premium' | 'premium-plus',
     months: number,
     zapEventId: string,
     giftedBy: string,
@@ -582,7 +612,11 @@ class NostrZapService {
     // Get or create account
     let account = await this.accountRepository.getByPubkey(pubkey);
 
-    const tier: Tier = subscriptionType === 'premium' ? 'premium' : 'premium_plus';
+    const tier: Tier = subscriptionType === 'basic'
+      ? 'basic'
+      : subscriptionType === 'premium'
+        ? 'premium'
+        : 'premium_plus';
     const tierConfig = config.tiers[tier];
 
     // Calculate subscription duration in milliseconds (using 31 days per month)
@@ -607,9 +641,14 @@ class NostrZapService {
       }
 
       // Update the account (upgrade tier if needed)
-      const shouldUpgradeTier = 
-        (tier === 'premium_plus' && account.tier !== 'premium_plus') ||
-        (tier === 'premium' && account.tier === 'free');
+      const tierPriority: Record<Tier, number> = {
+        free: 0,
+        basic: 1,
+        premium: 2,
+        premium_plus: 3,
+      };
+      const currentTier = account.tier as Tier;
+      const shouldUpgradeTier = tierPriority[tier] > tierPriority[currentTier];
 
       if (shouldUpgradeTier) {
         logger.info(`Upgrading tier from ${account.tier} to ${tier}`);
@@ -666,10 +705,19 @@ class NostrZapService {
    * Check if a zap event has already been processed
    */
   private async isEventProcessed(eventId: string): Promise<boolean> {
+    if (this.recentProcessedEvents.has(eventId)) {
+      return true;
+    }
+
     try {
       const existing = await this.prisma.processedZapEvent.findUnique({
         where: { eventId }
       });
+
+      if (existing) {
+        this.rememberProcessedEvent(eventId);
+      }
+
       return existing !== null;
     } catch (error) {
       logger.error(`Error checking if event ${eventId} is processed:`, error);
@@ -690,6 +738,8 @@ class NostrZapService {
     status: 'success' | 'underpaid' | 'failed',
     errorMessage?: string
   ): Promise<void> {
+    this.rememberProcessedEvent(eventId);
+
     try {
       const currentTime = now();
       await this.prisma.processedZapEvent.create({
@@ -709,8 +759,27 @@ class NostrZapService {
       });
       logger.info(`Marked zap event ${eventId} as processed with status: ${status}`);
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        logger.info(`Zap event ${eventId} was already marked as processed, skipping duplicate insert`);
+        return;
+      }
+
       logger.error(`Error marking event ${eventId} as processed:`, error);
       // Don't throw - this is not critical
+    }
+  }
+
+  private rememberProcessedEvent(eventId: string): void {
+    this.recentProcessedEvents.set(eventId, Date.now() + NostrZapService.RECENT_EVENT_TTL_MS);
+  }
+
+  private pruneRecentProcessedEvents(): void {
+    const currentTime = Date.now();
+
+    for (const [eventId, expiry] of this.recentProcessedEvents.entries()) {
+      if (expiry <= currentTime) {
+        this.recentProcessedEvents.delete(eventId);
+      }
     }
   }
 
@@ -719,7 +788,7 @@ class NostrZapService {
    */
   private async postGiftNotification(
     recipientPubkey: string,
-    subscriptionType: 'premium' | 'premium-plus',
+    subscriptionType: 'basic' | 'premium' | 'premium-plus',
     months: number,
     giftedBy: string,
     zapRequest: ParsedZapRequest
@@ -773,7 +842,11 @@ class NostrZapService {
       const nostrLinkTo = `nostr:${npubGiftedTo}`;
 
       // Create the notification content
-      const tierName = subscriptionType === 'premium' ? 'Premium' : 'Premium+';
+      const tierName = subscriptionType === 'basic'
+        ? 'Basic'
+        : subscriptionType === 'premium'
+          ? 'Premium'
+          : 'Premium+';
       const duration = months === 1 ? '1 month' : `${months} months`;
 
       const content = `🎁 Congratulations ${nostrLinkTo} ! You've received a Nostria ${tierName} subscription as a gift!
@@ -781,7 +854,7 @@ class NostrZapService {
 Duration: ${duration}
 Gifted by: ${nostrLinkFrom}
 
-Your premium subscription is now active! As a premium member, you can claim your unique username.
+Your paid Nostria subscription is now active! You can now claim your unique username.
 
 👉 Set up your username here: https://nostria.app/premium
 
