@@ -38,6 +38,33 @@ jest.mock('../database/PrismaPaymentRepository', () => ({
   }))
 }));
 
+jest.mock('../database/PrismaUserSettingsRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    getUserSettings: jest.fn(),
+    getUserSettingsByXRequestToken: jest.fn(),
+    getXAccountSummaries: jest.fn(),
+    upsertUserSettings: jest.fn(),
+    updateUserSettings: jest.fn(),
+    storeXRequestToken: jest.fn(),
+    clearXRequestToken: jest.fn(),
+    connectXAccount: jest.fn(),
+    disconnectXAccount: jest.fn(),
+    deleteUserSettings: jest.fn(),
+    getUsersByReleaseChannel: jest.fn(),
+    getDefaultSettings: jest.fn(),
+  }))
+}));
+
+jest.mock('../database/PrismaXPostRepository', () => ({
+  __esModule: true,
+  default: jest.fn().mockImplementation(() => ({
+    recordPost: jest.fn(),
+    getUsageSummary: jest.fn(),
+    getUsageSummaries: jest.fn(),
+  }))
+}));
+
 // Mock config for admin authentication
 jest.mock('../config', () => ({
   admin: {
@@ -82,11 +109,15 @@ import config from '../config';
 
 const paymentRepository = RepositoryFactory.getPaymentRepository();
 const accountRepository = RepositoryFactory.getAccountRepository();
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+const xPostRepository = RepositoryFactory.getXPostRepository();
 import { now } from '../helpers/now';
 import { Account } from '../models/account';
 
 const mockPaymentRepository = paymentRepository as jest.Mocked<typeof paymentRepository>;
 const mockAccountRepository = accountRepository as jest.Mocked<typeof accountRepository>;
+const mockUserSettingsRepository = userSettingsRepository as jest.Mocked<typeof userSettingsRepository>;
+const mockXPostRepository = xPostRepository as jest.Mocked<typeof xPostRepository>;
 
 // Helper function to generate admin NIP-98 token
 const generateAdminNIP98 = async (method = 'GET', url = '/api/account/list'): Promise<NIP98Fixture> => {
@@ -106,6 +137,8 @@ describe('Account API', () => {
   beforeEach(() => {
     account = testAccount()
     jest.resetAllMocks();
+    mockUserSettingsRepository.getXAccountSummaries.mockResolvedValue({});
+    mockXPostRepository.getUsageSummaries.mockResolvedValue({});
   });
 
   describe('GET /api/account/:pubkeyOrUsername', () => {
@@ -567,6 +600,8 @@ describe('Account API', () => {
       expect(response.body[0]).toHaveProperty('subscription');
       expect(response.body[0]).toHaveProperty('created');
       expect(response.body[0]).toHaveProperty('modified');
+      expect(response.body[0]).toHaveProperty('xConnection');
+      expect(response.body[0]).toHaveProperty('xUsage');
       expect(response.body[0].type).toBe('account');
       expect(mockAccountRepository.getAllAccounts).toHaveBeenCalledWith(100);
     });
@@ -636,6 +671,22 @@ describe('Account API', () => {
       });
       
       mockAccountRepository.getAllAccounts.mockResolvedValue([mockAccount]);
+      mockUserSettingsRepository.getXAccountSummaries.mockResolvedValue({
+        [mockAccount.pubkey]: {
+          pubkey: mockAccount.pubkey,
+          connected: true,
+          username: 'connected_user',
+          userId: 'x-user-1',
+        },
+      });
+      mockXPostRepository.getUsageSummaries.mockResolvedValue({
+        [mockAccount.pubkey]: {
+          pubkey: mockAccount.pubkey,
+          totalPosts: 7,
+          postsLast24h: 2,
+          lastPosted: now() - 60000,
+        },
+      });
 
       const response = await request(app)
         .get('/api/account/list')
@@ -653,6 +704,18 @@ describe('Account API', () => {
         created: mockAccount.created,
         modified: mockAccount.modified,
         lastLoginDate: mockAccount.lastLoginDate,
+        xConnection: {
+          connected: true,
+          username: 'connected_user',
+          userId: 'x-user-1',
+        },
+        xUsage: {
+          totalPosts: 7,
+          postsLast24h: 2,
+          lastPosted: expect.any(Number),
+          limit24h: undefined,
+          remaining24h: undefined,
+        },
       });
     });
   });
@@ -940,6 +1003,201 @@ describe('Account API', () => {
         .get('/api/account/subscription-history')
         .set('Authorization', `Nostr ${testAuth.token}`)
         .expect(500);
+    });
+  });
+
+  describe('POST /api/account/:pubkey/extend', () => {
+    it('should extend a premium subscription by 1 month', async () => {
+      const premiumAccount = testAccount({
+        tier: 'premium',
+        expires: Date.now() + 1000000,
+        subscription: {
+          tier: 'premium',
+          billingCycle: 'monthly',
+          entitlements: config.tiers['premium'].entitlements,
+        },
+      });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(premiumAccount);
+      mockAccountRepository.update.mockImplementation(async (acc: any) => acc);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Subscription extended by 1 month');
+      expect(response.body.newExpires).toBeGreaterThan(premiumAccount.expires!);
+      expect(mockAccountRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pubkey: premiumAccount.pubkey,
+          tier: 'premium',
+        })
+      );
+    });
+
+    it('should extend a premium_plus subscription by 1 week', async () => {
+      const premiumPlusAccount = testAccount({
+        tier: 'premium_plus',
+        expires: Date.now() + 1000000,
+        subscription: {
+          tier: 'premium_plus',
+          billingCycle: 'monthly',
+          entitlements: config.tiers['premium_plus'].entitlements,
+        },
+      });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumPlusAccount.pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(premiumPlusAccount);
+      mockAccountRepository.update.mockImplementation(async (acc: any) => acc);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumPlusAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ weeks: 1 })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Subscription extended by 1 week');
+      expect(response.body.newExpires).toBeGreaterThan(premiumPlusAccount.expires!);
+      expect(mockAccountRepository.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tier: 'premium_plus',
+        })
+      );
+    });
+
+    it('should extend from now if subscription is expired', async () => {
+      const expiredAccount = testAccount({
+        tier: 'premium',
+        expires: Date.now() - 1000000,
+        subscription: {
+          tier: 'premium',
+          billingCycle: 'monthly',
+          entitlements: config.tiers['premium'].entitlements,
+        },
+      });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${expiredAccount.pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(expiredAccount);
+      mockAccountRepository.update.mockImplementation(async (acc: any) => acc);
+
+      const response = await request(app)
+        .post(`/api/account/${expiredAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      // New expiry should be in the future (based on now, not expired date)
+      expect(response.body.newExpires).toBeGreaterThan(Date.now() - 1000);
+    });
+
+    it('should reject extending a free tier account', async () => {
+      const freeAccount = testAccount({ tier: 'free' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${freeAccount.pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(freeAccount);
+
+      const response = await request(app)
+        .post(`/api/account/${freeAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(400);
+
+      expect(response.body.error).toBe('Cannot extend a free tier subscription');
+    });
+
+    it('should reject when both months and weeks are provided', async () => {
+      const premiumAccount = testAccount({ tier: 'premium' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1, weeks: 1 })
+        .expect(400);
+
+      expect(response.body.error).toBe('Specify either months or weeks, not both');
+    });
+
+    it('should reject when neither months nor weeks is provided', async () => {
+      const premiumAccount = testAccount({ tier: 'premium' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({})
+        .expect(400);
+
+      expect(response.body.error).toBe('Specify either months or weeks, not both');
+    });
+
+    it('should reject invalid months value', async () => {
+      const premiumAccount = testAccount({ tier: 'premium' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 3 })
+        .expect(400);
+
+      expect(response.body.error).toBe('months must be 1');
+    });
+
+    it('should reject invalid weeks value', async () => {
+      const premiumAccount = testAccount({ tier: 'premium' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ weeks: 2 })
+        .expect(400);
+
+      expect(response.body.error).toBe('weeks must be 1');
+    });
+
+    it('should return 404 for non-existent account', async () => {
+      const pubkey = 'a'.repeat(64);
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockResolvedValueOnce(null);
+
+      const response = await request(app)
+        .post(`/api/account/${pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(404);
+
+      expect(response.body.error).toBe('Account not found');
+    });
+
+    it('should deny access for non-admin users', async () => {
+      const testAuth = await generateNIP98('POST');
+      const pubkey = 'a'.repeat(64);
+
+      const response = await request(app)
+        .post(`/api/account/${pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(403);
+
+      expect(response.body.error).toBe('Admin access required');
+    });
+
+    it('should handle server errors gracefully', async () => {
+      const premiumAccount = testAccount({ tier: 'premium' });
+      const testAuth = await generateAdminNIP98('POST', `/api/account/${premiumAccount.pubkey}/extend`);
+      mockAccountRepository.getByPubkey.mockRejectedValueOnce(new Error('Database error'));
+
+      const response = await request(app)
+        .post(`/api/account/${premiumAccount.pubkey}/extend`)
+        .set('Authorization', `Nostr ${testAuth.token}`)
+        .send({ months: 1 })
+        .expect(500);
+
+      expect(response.body.error).toBe('Failed to extend subscription');
     });
   });
 });

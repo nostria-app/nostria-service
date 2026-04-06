@@ -18,6 +18,8 @@ import validateUsername from './account/validateUsername';
 // Get repository instances from factory
 const accountRepository = RepositoryFactory.getAccountRepository();
 const paymentRepository = RepositoryFactory.getPaymentRepository();
+const userSettingsRepository = RepositoryFactory.getUserSettingsRepository();
+const xPostRepository = RepositoryFactory.getXPostRepository();
 
 const authRateLimit = createRateLimit(
   15 * 60 * 1000, // 15 minutes
@@ -193,6 +195,18 @@ interface AccountListDto {
   created: number;
   modified: number;
   lastLoginDate?: number;
+  xConnection: {
+    connected: boolean;
+    username?: string;
+    userId?: string;
+  };
+  xUsage: {
+    totalPosts: number;
+    postsLast24h: number;
+    lastPosted?: number;
+    limit24h?: number;
+    remaining24h?: number;
+  };
 }
 
 /**
@@ -935,6 +949,7 @@ router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res
   try {
     console.log('Account list endpoint reached with auth:', req.authenticatedPubkey);
     const limit = parseInt(req.query.limit as string) || 100;
+    const xMaxPostsPer24h = Math.max(0, parseInt(process.env.X_MAX_POSTS_PER_24H || '12', 10) || 12);
     
     // Validate limit
     if (limit < 1 || limit > 1000) {
@@ -942,9 +957,19 @@ router.get('/list', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res
     }
 
     const accounts = await accountRepository.getAllAccounts(limit);
+    const pubkeys = accounts.map((account) => account.pubkey);
+    const [xAccountSummaries, xUsageSummaries] = await Promise.all([
+      userSettingsRepository.getXAccountSummaries(pubkeys),
+      xPostRepository.getUsageSummaries(pubkeys),
+    ]);
 
     // Convert accounts to DTOs
-    const accountDtos = accounts.map(account => toAccountListDto(account));
+    const accountDtos = accounts.map((account) => toAccountListDto(
+      account,
+      xAccountSummaries[account.pubkey],
+      xUsageSummaries[account.pubkey],
+      xMaxPostsPer24h,
+    ));
 
     logger.info(`Retrieved ${accountDtos.length} accounts for authenticated user ${req.authenticatedPubkey?.substring(0, 16)}...`);
 
@@ -1206,8 +1231,152 @@ router.put('/', authUser, async (req: UpdateAccountRequest, res: UpdateAccountRe
   }
 });
 
+/**
+ * @openapi
+ * /account/{pubkey}/extend:
+ *   post:
+ *     operationId: "ExtendSubscription"
+ *     summary: Extend a user's subscription (admin only)
+ *     description: >
+ *       Extends the current subscription of a user by a specified duration.
+ *       The tier is preserved (Premium stays Premium, Premium+ stays Premium+).
+ *       No invoice is created. Only accessible to admin public keys.
+ *     tags:
+ *       - Account
+ *       - Admin
+ *     security:
+ *       - NIP98Auth: []
+ *     parameters:
+ *       - name: pubkey
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The public key of the account to extend
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               months:
+ *                 type: number
+ *                 description: Number of months to extend (1)
+ *               weeks:
+ *                 type: number
+ *                 description: Number of weeks to extend (1)
+ *     responses:
+ *       '200':
+ *         description: Subscription extended successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 newExpires:
+ *                   type: number
+ *       '400':
+ *         description: Invalid request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '403':
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '404':
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       '500':
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/:pubkey/extend', requireAdminAuth, async (req: NIP98AuthenticatedRequest, res: Response) => {
+  try {
+    const { pubkey } = req.params;
+    const { months, weeks } = req.body;
+
+    if (!pubkey || !isPotentiallyPubkey(pubkey)) {
+      return res.status(400).json({ error: 'Valid pubkey is required' });
+    }
+
+    // Validate that exactly one duration type is provided
+    if ((!months && !weeks) || (months && weeks)) {
+      return res.status(400).json({ error: 'Specify either months or weeks, not both' });
+    }
+
+    if (months !== undefined && months !== 1) {
+      return res.status(400).json({ error: 'months must be 1' });
+    }
+
+    if (weeks !== undefined && weeks !== 1) {
+      return res.status(400).json({ error: 'weeks must be 1' });
+    }
+
+    // Get the account
+    const account = await accountRepository.getByPubkey(pubkey);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Only extend paid tiers
+    if (account.tier === 'free') {
+      return res.status(400).json({ error: 'Cannot extend a free tier subscription' });
+    }
+
+    // Calculate extension duration
+    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const ONE_MONTH_MS = 31 * 24 * 60 * 60 * 1000;
+    const duration = months ? ONE_MONTH_MS : ONE_WEEK_MS;
+
+    // Calculate new expiry: extend from current expiry if still active, otherwise from now
+    const currentTime = now();
+    const newExpires = (account.expires && account.expires > currentTime)
+      ? account.expires + duration
+      : currentTime + duration;
+
+    // Update the account, preserving the current tier and subscription details
+    const updatedAccount = await accountRepository.update({
+      ...account,
+      expires: newExpires,
+      modified: now(),
+    });
+
+    const durationLabel = months ? '1 month' : '1 week';
+    logger.info(`Admin extended subscription for ${pubkey.substring(0, 16)}... by ${durationLabel}, new expires: ${new Date(newExpires).toISOString()}`);
+
+    return res.status(200).json({
+      success: true,
+      message: `Subscription extended by ${durationLabel}`,
+      newExpires: updatedAccount.expires,
+    });
+  } catch (error: any) {
+    logger.error(`Error extending subscription: ${error.message}`);
+    return res.status(500).json({ error: 'Failed to extend subscription' });
+  }
+});
+
 // Helper function to convert Account to AccountListDto
-const toAccountListDto = (account: Account): AccountListDto => ({
+const toAccountListDto = (
+  account: Account,
+  xConnection?: { connected: boolean; username?: string; userId?: string },
+  xUsage?: { totalPosts: number; postsLast24h: number; lastPosted?: number },
+  xMaxPostsPer24h = 0,
+): AccountListDto => ({
   id: account.id,
   type: account.type as 'account',
   pubkey: account.pubkey,
@@ -1218,6 +1387,18 @@ const toAccountListDto = (account: Account): AccountListDto => ({
   created: account.created,
   modified: account.modified,
   lastLoginDate: account.lastLoginDate,
+  xConnection: {
+    connected: xConnection?.connected ?? false,
+    username: xConnection?.username,
+    userId: xConnection?.userId,
+  },
+  xUsage: {
+    totalPosts: xUsage?.totalPosts ?? 0,
+    postsLast24h: xUsage?.postsLast24h ?? 0,
+    lastPosted: xUsage?.lastPosted,
+    limit24h: xMaxPostsPer24h > 0 ? xMaxPostsPer24h : undefined,
+    remaining24h: xMaxPostsPer24h > 0 ? Math.max(0, xMaxPostsPer24h - (xUsage?.postsLast24h ?? 0)) : undefined,
+  },
 });
 
 export default router; 
