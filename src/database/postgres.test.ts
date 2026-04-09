@@ -94,6 +94,23 @@ describe('PostgreSQL Repositories', () => {
       expect(retrievedAccount?.username).toBe(testAccount.username);
     });
 
+    test('should get account by username case-insensitively', async () => {
+      const mixedCaseAccount = {
+        ...testAccount,
+        pubkey: 'test-pubkey-mixed-case',
+        username: 'BuTanka',
+      };
+
+      await accountRepo.create(mixedCaseAccount);
+      const retrievedAccount = await accountRepo.getByUsername('butanka');
+
+      expect(retrievedAccount).toBeDefined();
+      expect(retrievedAccount?.pubkey).toBe(mixedCaseAccount.pubkey);
+      expect(retrievedAccount?.username).toBe(mixedCaseAccount.username);
+
+      await accountRepo.deleteAccount(mixedCaseAccount.pubkey);
+    });
+
     test('should check if username is taken', async () => {
       await accountRepo.create(testAccount);
       
@@ -102,6 +119,24 @@ describe('PostgreSQL Repositories', () => {
 
       const isNotTaken = await accountRepo.isUsernameTaken('nonexistentuser');
       expect(isNotTaken).toBe(false);
+    });
+
+    test('should check if username is taken case-insensitively', async () => {
+      const mixedCaseAccount = {
+        ...testAccount,
+        pubkey: 'test-pubkey-case-insensitive-check',
+        username: 'BuTanka',
+      };
+
+      await accountRepo.create(mixedCaseAccount);
+
+      const isTaken = await accountRepo.isUsernameTaken('butanka');
+      expect(isTaken).toBe(true);
+
+      const isTakenWhenExcluded = await accountRepo.isUsernameTaken('butanka', mixedCaseAccount.pubkey);
+      expect(isTakenWhenExcluded).toBe(false);
+
+      await accountRepo.deleteAccount(mixedCaseAccount.pubkey);
     });
 
     test('should update an account', async () => {

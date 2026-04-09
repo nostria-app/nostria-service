@@ -54,7 +54,10 @@ class PrismaAccountRepository extends PrismaBaseRepository {
     try {
       const account = await this.prisma.account.findFirst({
         where: {
-          username: username,
+          username: {
+            equals: username,
+            mode: 'insensitive'
+          },
           pubkey: excludePubkey ? { not: excludePubkey } : undefined
         }
       });
@@ -81,8 +84,13 @@ class PrismaAccountRepository extends PrismaBaseRepository {
 
   async getByUsername(username: string): Promise<Account | null> {
     try {
-      const result = await this.prisma.account.findUnique({
-        where: { username }
+      const result = await this.prisma.account.findFirst({
+        where: {
+          username: {
+            equals: username,
+            mode: 'insensitive'
+          }
+        }
       });
 
       return result ? this.transformPrismaAccountToAccount(result) : null;
