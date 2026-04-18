@@ -37,7 +37,7 @@ export class GrokPremiumRequiredError extends Error {
 }
 
 export class GrokBalanceRequiredError extends Error {
-  constructor(message: string = 'Your Grok balance is too low. Increase your credits to continue.') {
+  constructor(message: string = 'Your balance is too low. Increase your credits to continue.') {
     super(message);
     this.name = 'GrokBalanceRequiredError';
   }
@@ -531,7 +531,7 @@ class GrokService {
     const requiredBalance = this.applyResponseSafetyMargin(estimatedCost, config);
 
     if (balance.balanceNanosUsd < requiredBalance) {
-      throw new GrokBalanceRequiredError('Your Grok balance is too low for this request after applying the response safety margin. Increase your credits to continue.');
+      throw new GrokBalanceRequiredError('Your balance is too low for this request after applying the response safety margin. Increase your credits to continue.');
     }
 
     const requestId = uuidv4();
