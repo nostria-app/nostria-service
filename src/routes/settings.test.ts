@@ -20,7 +20,6 @@ jest.mock('nostr-tools', () => ({
 describe('Settings API', () => {
   const testPubkey = 'test_pubkey_123';
   const validSettings = {
-    releaseChannel: 'beta' as const,
     socialSharing: false
   };
 
@@ -38,7 +37,6 @@ describe('Settings API', () => {
         id: `user-settings-${testPubkey}`,
         type: 'user-settings',
         pubkey: testPubkey,
-        releaseChannel: 'beta',
         socialSharing: false,
         created: now(),
         modified: now()
@@ -54,7 +52,6 @@ describe('Settings API', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.pubkey).toBe(testPubkey);
-      expect(response.body.data.releaseChannel).toBe('beta');
       expect(response.body.data.socialSharing).toBe(false);
       expect(mockUserSettingsRepository.upsertUserSettings).toHaveBeenCalledWith(testPubkey, validSettings);
     });
@@ -68,24 +65,8 @@ describe('Settings API', () => {
       expect(response.body.error).toBe('Invalid or missing authorization token');
     });
 
-    it('should return 400 for invalid release channel', async () => {
-      const invalidSettings = {
-        releaseChannel: 'invalid_channel',
-        socialSharing: true
-      };
-
-      const response = await request(app)
-        .post(`/api/settings/${testPubkey}`)
-        .set('Authorization', 'Bearer test_token')
-        .send(invalidSettings);
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Invalid release channel');
-    });
-
     it('should return 400 for invalid social sharing value', async () => {
       const invalidSettings = {
-        releaseChannel: 'stable',
         socialSharing: 'not_a_boolean'
       };
 
@@ -105,7 +86,6 @@ describe('Settings API', () => {
         id: `user-settings-${testPubkey}`,
         type: 'user-settings',
         pubkey: testPubkey,
-        releaseChannel: 'beta',
         socialSharing: false,
         created: now(),
         modified: now()
@@ -120,14 +100,12 @@ describe('Settings API', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.data.pubkey).toBe(testPubkey);
-      expect(response.body.data.releaseChannel).toBe('beta');
       expect(response.body.data.socialSharing).toBe(false);
     });
 
     it('should return default settings when none exist', async () => {
       mockUserSettingsRepository.getUserSettings.mockResolvedValue(null);
       mockUserSettingsRepository.getDefaultSettings.mockReturnValue({
-        releaseChannel: 'stable',
         socialSharing: true
       });
 
@@ -137,7 +115,6 @@ describe('Settings API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.releaseChannel).toBe('stable');
       expect(response.body.data.socialSharing).toBe(true);
       expect(response.body.isDefault).toBe(true);
     });
@@ -145,12 +122,11 @@ describe('Settings API', () => {
 
   describe('PATCH /api/settings/:pubkey', () => {
     it('should update specific settings fields', async () => {
-      const updates = { releaseChannel: 'alpha' as const };
+      const updates = { socialSharing: true };
       const mockUpdatedSettings = {
         id: `user-settings-${testPubkey}`,
         type: 'user-settings',
         pubkey: testPubkey,
-        releaseChannel: 'alpha',
         socialSharing: true,
         created: now(),
         updated: now()
@@ -165,7 +141,7 @@ describe('Settings API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data.releaseChannel).toBe('alpha');
+  expect(response.body.data.socialSharing).toBe(true);
       expect(mockUserSettingsRepository.updateUserSettings).toHaveBeenCalledWith(testPubkey, updates);
     });
 
@@ -186,7 +162,6 @@ describe('Settings API', () => {
         id: `user-settings-${testPubkey}`,
         type: 'user-settings',
         pubkey: testPubkey,
-        releaseChannel: 'beta',
         socialSharing: false,
         created: now(),
         updated: now()
@@ -213,30 +188,6 @@ describe('Settings API', () => {
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Settings not found');
-    });
-  });
-
-  describe('GET /api/settings/admin/release-channel/:channel', () => {
-    it('should return users by release channel', async () => {
-      const mockUsers = ['pubkey1', 'pubkey2', 'pubkey3'];
-      mockUserSettingsRepository.getUsersByReleaseChannel.mockResolvedValue(mockUsers);
-
-      const response = await request(app)
-        .get('/api/settings/admin/release-channel/beta');
-
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.releaseChannel).toBe('beta');
-      expect(response.body.data.userCount).toBe(3);
-      expect(response.body.data.users).toEqual(mockUsers);
-    });
-
-    it('should return 400 for invalid release channel', async () => {
-      const response = await request(app)
-        .get('/api/settings/admin/release-channel/invalid');
-
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Invalid release channel');
     });
   });
 });

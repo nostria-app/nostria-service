@@ -24,7 +24,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
       id: prismaUserSettings.id,
       type: 'user-settings',
       pubkey: prismaUserSettings.pubkey,
-      releaseChannel: prismaUserSettings.releaseChannel,
       socialSharing: prismaUserSettings.socialSharing,
       xUserId: prismaUserSettings.xUserId ?? undefined,
       xUsername: prismaUserSettings.xUsername ?? undefined,
@@ -42,7 +41,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
     return {
       id: userSettings.id,
       pubkey: userSettings.pubkey,
-      releaseChannel: userSettings.releaseChannel,
       socialSharing: userSettings.socialSharing,
       xUserId: userSettings.xUserId ?? null,
       xUsername: userSettings.xUsername ?? null,
@@ -74,8 +72,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
         id,
         type: 'user-settings',
         pubkey,
-        // Apply defaults for required fields if not provided
-        releaseChannel: settingsData.releaseChannel || existing?.releaseChannel || 'stable',
         socialSharing: settingsData.socialSharing !== undefined ? settingsData.socialSharing : existing?.socialSharing || false,
         created: existing?.created || now(),
         modified: now()
@@ -86,7 +82,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
       const upsertedSettings = await this.prisma.userSettings.upsert({
         where: { pubkey },
         update: {
-          releaseChannel: prismaData.releaseChannel,
           socialSharing: prismaData.socialSharing,
           modified: prismaData.modified
         },
@@ -189,9 +184,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
         modified: BigInt(now())
       };
 
-      if (updates.releaseChannel !== undefined) {
-        updateData.releaseChannel = updates.releaseChannel;
-      }
       if (updates.socialSharing !== undefined) {
         updateData.socialSharing = updates.socialSharing;
       }
@@ -225,7 +217,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
         create: {
           id,
           pubkey,
-          releaseChannel: existing?.releaseChannel || 'stable',
           socialSharing: existing?.socialSharing || false,
           xRequestToken: tokenData.requestToken,
           xRequestSecret: tokenData.requestSecret,
@@ -288,7 +279,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
         create: {
           id,
           pubkey,
-          releaseChannel: existing?.releaseChannel || 'stable',
           socialSharing: existing?.socialSharing || false,
           xUserId: connectionData.userId,
           xUsername: connectionData.username,
@@ -352,25 +342,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
   }
 
   /**
-   * Get users by release channel
-   * @param channel - Release channel to filter by
-   * @returns Promise<string[]> - Array of pubkeys
-   */
-  async getUsersByReleaseChannel(channel: 'stable' | 'beta' | 'alpha'): Promise<string[]> {
-    try {
-      const users = await this.prisma.userSettings.findMany({
-        where: { releaseChannel: channel },
-        select: { pubkey: true }
-      });
-
-      return users.map((user: any) => user.pubkey);
-    } catch (error) {
-      logger.error('Failed to get users by release channel:', error);
-      throw new Error(`Failed to get users by release channel: ${(error as Error).message}`);
-    }
-  }
-
-  /**
    * Get default settings structure
    * @returns UserSettings with default values
    */
@@ -379,7 +350,6 @@ class PrismaUserSettingsRepository extends PrismaBaseRepository {
       id: '',
       type: 'user-settings',
       pubkey: '',
-      releaseChannel: 'stable',
       socialSharing: false,
       created: now(),
       modified: now()

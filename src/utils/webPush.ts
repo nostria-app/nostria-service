@@ -98,9 +98,21 @@ class WebPushService {
         // Return specific error for handling expired subscriptions
         return { error: 'expired_subscription', statusCode: error.statusCode };
       }
+
+      if (this.isPermanentlyRemovedEndpointError(error, subscription)) {
+        logger.warn(`Subscription endpoint is permanently removed: ${subscription.endpoint}`);
+        return { error: 'expired_subscription' };
+      }
       
       throw error;
     }
+  }
+
+  private isPermanentlyRemovedEndpointError(error: unknown, subscription: PushSubscription): boolean {
+    const endpoint = typeof subscription.endpoint === 'string' ? subscription.endpoint : '';
+    const message = error instanceof Error ? error.message : String(error || '');
+
+    return endpoint.includes('permanently-removed.invalid') || message.includes('permanently-removed.invalid');
   }
 
   /**

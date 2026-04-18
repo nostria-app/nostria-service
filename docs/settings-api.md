@@ -26,7 +26,6 @@ Creates or updates user settings for the specified pubkey.
 #### Request Body
 ```json
 {
-  "releaseChannel": "stable" | "beta" | "alpha",
   "socialSharing": boolean
 }
 ```
@@ -38,7 +37,6 @@ Creates or updates user settings for the specified pubkey.
   "message": "User settings saved successfully",
   "data": {
     "pubkey": "string",
-    "releaseChannel": "stable" | "beta" | "alpha",
     "socialSharing": boolean,
     "created": "2025-06-24T10:30:00.000Z",
     "modified": "2025-06-24T10:30:00.000Z"
@@ -52,7 +50,6 @@ curl -X POST "https://api.nostria.app/api/settings/npub123..." \
   -H "Authorization: Bearer <nip98-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "releaseChannel": "beta",
     "socialSharing": false
   }'
 ```
@@ -72,7 +69,6 @@ Retrieves user settings for the specified pubkey. Returns default settings if no
   "message": "User settings retrieved successfully",
   "data": {
     "pubkey": "string",
-    "releaseChannel": "stable" | "beta" | "alpha",
     "socialSharing": boolean,
     "created": "2025-06-24T10:30:00.000Z",
     "modified": "2025-06-24T10:30:00.000Z"
@@ -98,8 +94,7 @@ Updates specific user settings fields without affecting others.
 #### Request Body
 ```json
 {
-  "releaseChannel": "alpha"
-  // Only include fields you want to update
+  "socialSharing": false
 }
 ```
 
@@ -110,8 +105,7 @@ Updates specific user settings fields without affecting others.
   "message": "User settings updated successfully",
   "data": {
     "pubkey": "string",
-    "releaseChannel": "alpha",
-    "socialSharing": true, // unchanged from previous value
+    "socialSharing": false,
     "created": "2025-06-24T10:30:00.000Z",
     "modified": "2025-06-24T10:35:00.000Z"
   }
@@ -124,7 +118,7 @@ curl -X PATCH "https://api.nostria.app/api/settings/npub123..." \
   -H "Authorization: Bearer <nip98-token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "releaseChannel": "alpha"
+    "socialSharing": false
   }'
 ```
 
@@ -150,46 +144,11 @@ curl -X DELETE "https://api.nostria.app/api/settings/npub123..." \
   -H "Authorization: Bearer <nip98-token>"
 ```
 
-### 5. Get Users by Release Channel (Admin)
-**GET** `/api/settings/admin/release-channel/:channel`
-
-Retrieves all users using a specific release channel. This is an admin endpoint for feature rollout management.
-
-#### Parameters
-- `channel` (path): Release channel ("stable", "beta", or "alpha")
-
-#### Response
-```json
-{
-  "success": true,
-  "message": "Users with release channel 'beta' retrieved successfully",
-  "data": {
-    "releaseChannel": "beta",
-    "userCount": 25,
-    "users": ["npub123...", "npub456...", "npub789..."]
-  }
-}
-```
-
-#### Example
-```bash
-curl -X GET "https://api.nostria.app/api/settings/admin/release-channel/beta"
-```
-
 ## Settings Fields
-
-### Release Channel
-- **Type**: `string`
-- **Values**: `"stable"`, `"beta"`, `"alpha"`
-- **Default**: `"stable"`
-- **Description**: Determines which version/features the user receives
-  - `stable`: Production-ready features only
-  - `beta`: Pre-release features for testing
-  - `alpha`: Experimental features (may be unstable)
 
 ### Social Sharing
 - **Type**: `boolean`
-- **Default**: `true`
+- **Default**: `false`
 - **Description**: Whether the user allows social sharing features
 
 ## Error Responses
@@ -228,9 +187,9 @@ curl -X GET "https://api.nostria.app/api/settings/admin/release-channel/beta"
 
 ## Usage Examples
 
-### Setting up a beta tester
+### Enabling social sharing
 ```javascript
-// User opts into beta channel
+// User enables social sharing
 await fetch('/api/settings/npub123...', {
   method: 'POST',
   headers: {
@@ -238,7 +197,6 @@ await fetch('/api/settings/npub123...', {
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    releaseChannel: 'beta',
     socialSharing: true
   })
 });

@@ -91,11 +91,14 @@ model Payment {
   lnHash       String
   lnInvoice    String
   lnAmountSat  Int
+  purpose      String  @default("subscription")
   tier         String
   billingCycle String
   priceCents   Int
+  creditNanosUsd BigInt?
   isPaid       Boolean
   paid         BigInt?
+  applied      BigInt?
   expires      BigInt
   pubkey       String
   created      BigInt
@@ -105,13 +108,74 @@ model Payment {
   @@index([lnHash])
   @@index([isPaid])
   @@index([expires])
+  @@index([purpose])
   @@map("payments")
+}
+
+model GrokBalance {
+  pubkey              String  @id
+  balanceNanosUsd     BigInt
+  totalSpentNanosUsd  BigInt
+  totalToppedUpNanosUsd BigInt
+  created             BigInt
+  modified            BigInt
+
+  @@map("grok_balances")
+}
+
+model GrokTransaction {
+  id                String  @id @default(uuid())
+  pubkey            String
+  transactionType   String
+  amountNanosUsd    BigInt
+  balanceAfterNanosUsd BigInt
+  paymentId         String?
+  requestId         String?
+  description       String?
+  created           BigInt
+  modified          BigInt
+
+  @@index([pubkey])
+  @@index([paymentId])
+  @@index([requestId])
+  @@index([created])
+  @@map("grok_transactions")
+}
+
+model GrokUsage {
+  id                String  @id @default(uuid())
+  pubkey            String
+  requestId         String  @unique
+  providerRequestId String?
+  operationType     String
+  model             String
+  inputTokens       Int
+  outputTokens      Int
+  reasoningTokens   Int
+  imageCount        Int
+  costNanosUsd      BigInt
+  created           BigInt
+  modified          BigInt
+
+  @@index([pubkey])
+  @@index([operationType])
+  @@index([created])
+  @@index([pubkey, operationType, created])
+  @@map("grok_usages")
+}
+
+model GrokConfig {
+  id       String @id
+  settings Json
+  created  BigInt
+  modified BigInt
+
+  @@map("grok_config")
 }
 
 model UserSettings {
   id             String  @id
   pubkey         String  @unique
-  releaseChannel String
   socialSharing  Boolean
   xUserId        String?
   xUsername      String?

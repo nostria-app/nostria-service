@@ -43,18 +43,15 @@ export interface ErrorBody {
 
 // Settings API types
 export interface UserSettingsCreateRequest {
-  releaseChannel?: 'stable' | 'beta' | 'alpha';
   socialSharing?: boolean;
 }
 
 export interface UserSettingsUpdateRequest {
-  releaseChannel?: 'stable' | 'beta' | 'alpha';
   socialSharing?: boolean;
 }
 
 export interface UserSettingsResponse {
   pubkey: string;
-  releaseChannel: 'stable' | 'beta' | 'alpha';
   socialSharing: boolean;
   created: number;
   updated: number;
@@ -67,12 +64,3 @@ export interface UserSettingsApiResponse {
   isDefault?: boolean;
 }
 
-export interface ReleaseChannelUsersResponse {
-  success: boolean;
-  message: string;
-  data: {
-    releaseChannel: string;
-    userCount: number;
-    users: string[];
-  };
-}

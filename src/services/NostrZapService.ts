@@ -1,5 +1,3 @@
-import { Prisma } from '@prisma/client';
-
 import { SimplePool, Filter, Event, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
 import config from '../config';
 import { Tier } from '../config/types';
@@ -738,12 +736,12 @@ class NostrZapService {
     status: 'success' | 'underpaid' | 'failed',
     errorMessage?: string
   ): Promise<void> {
-    this.rememberProcessedEvent(eventId);
-
     try {
       const currentTime = now();
-      await this.prisma.processedZapEvent.create({
-        data: {
+      await this.prisma.processedZapEvent.upsert({
+        where: { eventId },
+        update: {},
+        create: {
           id: eventId,
           eventId,
           recipientPubkey,
@@ -755,15 +753,11 @@ class NostrZapService {
           errorMessage,
           processed: BigInt(currentTime),
           created: BigInt(currentTime)
-        }
+        },
       });
-      logger.info(`Marked zap event ${eventId} as processed with status: ${status}`);
+      this.rememberProcessedEvent(eventId);
+      logger.info(`Ensured zap event ${eventId} is marked as processed with status: ${status}`);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        logger.info(`Zap event ${eventId} was already marked as processed, skipping duplicate insert`);
-        return;
-      }
-
       logger.error(`Error marking event ${eventId} as processed:`, error);
       // Don't throw - this is not critical
     }

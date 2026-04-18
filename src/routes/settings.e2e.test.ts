@@ -22,7 +22,6 @@ describe('End-to-end Settings API (populated database)', () => {
   const testPubkey = 'test_pubkey_123';
 
   const validSettings = {
-    releaseChannel: 'beta' as const,
     socialSharing: false
   };
 
@@ -44,7 +43,7 @@ describe('End-to-end Settings API (populated database)', () => {
       expect(savedSettings?.id).toBe(settings.id);
       expect(savedSettings?.created).toBe(settings.created);
 
-      savedSettings!.releaseChannel = 'alpha';
+      savedSettings!.socialSharing = true;
       const updatedSettings = await userSettingsRepository.upsertUserSettings(testPubkey, savedSettings!);
 
       // Ensure that created date is preserved
@@ -59,12 +58,6 @@ describe('End-to-end Settings API (populated database)', () => {
     it('should get user settings successfully', async () => {
       const savedSettings = await userSettingsRepository.getUserSettings(testPubkey);
       expect(savedSettings).toBeDefined();
-    });
-
-    it('should get all uses based on release channel', async () => {
-      const users = await userSettingsRepository.getUsersByReleaseChannel('alpha');
-      expect(users).toBeDefined();
-      // console.log('Retrieved settings:', users);
     });
   });
 });

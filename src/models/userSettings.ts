@@ -2,7 +2,6 @@ export interface UserSettings {
   id: string; // Will be "-user-settings" + pubkey
   type: 'user-settings' | string;
   pubkey: string;
-  releaseChannel: 'stable' | 'beta' | 'alpha';
   socialSharing: boolean;
   xUserId?: string;
   xUsername?: string;
@@ -16,13 +15,11 @@ export interface UserSettings {
 }
 
 export interface UserSettingsUpdate {
-  releaseChannel?: 'stable' | 'beta' | 'alpha';
   socialSharing?: boolean;
 }
 
 export interface UserSettingsResponse {
   pubkey: string;
-  releaseChannel: 'stable' | 'beta' | 'alpha';
   socialSharing: boolean;
   created: number;
   modified: number;

@@ -1,14 +1,14 @@
 # User Settings Implementation Summary
 
 ## Overview
-Created a comprehensive generic user settings API with full CRUD operations for the Nostria service. The API supports two initial settings: `releaseChannel` and `socialSharing`.
+Created a comprehensive generic user settings API with full CRUD operations for the Nostria service. The API supports `socialSharing` and X account linkage metadata.
 
 ## 🚀 **Features Implemented**
 
 ### 1. **Models & Data Structure**
 - **UserSettings Model** (`src/models/userSettings.ts`)
   - CosmosDB-compatible entity with `type: 'user-settings'`
-  - Support for `releaseChannel` and `socialSharing` settings
+  - Support for `socialSharing` and X account linkage settings
   - Proper TypeScript interfaces for requests/responses
 
 ### 2. **Repository Layer**
@@ -16,14 +16,12 @@ Created a comprehensive generic user settings API with full CRUD operations for 
   - Full CRUD operations with proper error handling
   - Validation for settings values
   - Default settings management
-  - Admin query functionality for release channel filtering
 
 ### 3. **API Endpoints**
 - **POST** `/api/settings/:pubkey` - Create/update settings
 - **GET** `/api/settings/:pubkey` - Retrieve settings (with defaults)
 - **PATCH** `/api/settings/:pubkey` - Update specific fields
 - **DELETE** `/api/settings/:pubkey` - Delete all settings
-- **GET** `/api/settings/admin/release-channel/:channel` - Admin endpoint for feature rollouts
 
 ### 4. **Security & Validation**
 - NIP-98 authentication on all endpoints
@@ -44,17 +42,9 @@ Created a comprehensive generic user settings API with full CRUD operations for 
 
 ## 📋 **Settings Available**
 
-### Release Channel
-- **Values**: `"stable"`, `"beta"`, `"alpha"`
-- **Default**: `"stable"`
-- **Purpose**: Feature rollout management
-  - `stable`: Production features only
-  - `beta`: Pre-release testing features
-  - `alpha`: Experimental features
-
 ### Social Sharing
 - **Type**: `boolean`
-- **Default**: `true`
+- **Default**: `false`
 - **Purpose**: User privacy control for social features
 
 ## 🛡️ **Security Features**
@@ -70,11 +60,6 @@ Created a comprehensive generic user settings API with full CRUD operations for 
 - **ID Strategy**: `user-settings-{pubkey}` for unique identification
 - **Type System**: `'user-settings'` document type for schema identification
 - **Backward Compatibility**: Extensible design for future settings
-
-## 📊 **Admin Features**
-
-- **Release Channel Filtering**: Get all users by release channel for targeted feature rollouts
-- **User Management**: Support for beta testing and gradual feature deployment
 
 ## 🔄 **Integration**
 
@@ -109,21 +94,15 @@ export interface UserSettings extends CosmosDbEntity {
 
 ### Frontend Integration
 ```javascript
-// Set user to beta channel
+// Enable social sharing
 await userSettings.update({
-  releaseChannel: 'beta'
+  socialSharing: true
 });
 
 // Disable social sharing
 await userSettings.update({
   socialSharing: false
 });
-```
-
-### Admin Operations
-```javascript
-// Get all beta testers for new feature rollout
-const betaUsers = await fetch('/api/settings/admin/release-channel/beta');
 ```
 
 The implementation follows Azure best practices for CosmosDB integration, provides comprehensive error handling, and maintains full type safety throughout the application.

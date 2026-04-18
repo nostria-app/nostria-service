@@ -2,6 +2,9 @@ import { BillingCycle, Tier } from "../config/types";
 
 export const INVOICE_TTL = 15 * 60 * 1000; // 15 minutes
 
+export type PaymentPurpose = 'subscription' | 'grok_topup';
+export type PaymentBillingCycle = BillingCycle | 'one_time';
+
 export interface Payment {
   id: string;
   type: 'payment'; // Document type for CosmosDB querying
@@ -13,11 +16,14 @@ export interface Payment {
   lnAmountSat: number;
 
   // Plan and payment status
+  purpose?: PaymentPurpose;
   tier: Tier;
-  billingCycle: BillingCycle;
+  billingCycle: PaymentBillingCycle;
   priceCents: number;
+  creditNanosUsd?: number;
   isPaid: boolean;
   paid?: number;
+  applied?: number;
   expires: number;
   
   // User

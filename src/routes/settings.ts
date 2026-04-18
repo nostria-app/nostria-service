@@ -27,11 +27,6 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *     UserSettingsUpdate:
  *       type: object
  *       properties:
- *         releaseChannel:
- *           type: string
- *           enum: [stable, beta, alpha]
- *           description: Release channel preference for app updates
- *           example: "stable"
  *         socialSharing:
  *           type: boolean
  *           description: Whether social sharing features are enabled
@@ -43,11 +38,6 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           type: string
  *           description: User's public key
  *           example: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
- *         releaseChannel:
- *           type: string
- *           enum: [stable, beta, alpha]
- *           description: Release channel preference
- *           example: "stable"
  *         socialSharing:
  *           type: boolean
  *           description: Social sharing preference
@@ -60,29 +50,6 @@ const authUser = [authRateLimit, requireNIP98Auth];
  *           type: number
  *           format: timestamp
  *           description: Settings last update timestamp
- *     UsersByReleaseChannel:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *           description: Operation success status
- *         message:
- *           type: string
- *           description: Operation result message
- *         data:
- *           type: object
- *           properties:
- *             releaseChannel:
- *               type: string
- *               description: The queried release channel
- *             userCount:
- *               type: integer
- *               description: Number of users in this channel
- *             users:
- *               type: array
- *               items:
- *                 type: string
- *               description: Array of user public keys
  *     SuccessResponse:
  *       type: object
  *       properties:
@@ -129,7 +96,6 @@ const router = express.Router();
 function transformToResponse(settings: any): UserSettingsResponse {
   return {
     pubkey: settings.pubkey,
-    releaseChannel: settings.releaseChannel,
     socialSharing: settings.socialSharing,
     created: settings.created,
     modified: settings._ts
@@ -143,7 +109,7 @@ function transformToResponse(settings: any): UserSettingsResponse {
  *     summary: Create or update user settings
  *     description: |
  *       Create new user settings or update existing ones. Requires NIP-98 authentication.
- *       Validates release channel and social sharing preferences before saving.
+ *       Validates social sharing preferences before saving.
  *     tags:
  *       - Settings
  *     security:
@@ -164,7 +130,6 @@ function transformToResponse(settings: any): UserSettingsResponse {
  *           schema:
  *             $ref: '#/components/schemas/UserSettingsUpdate'
  *           example:
- *             releaseChannel: "stable"
  *             socialSharing: true
  *     responses:
  *       '200':
@@ -209,15 +174,6 @@ router.post('/:pubkey', authUser, async (req: Request, res: Response): Promise<v
       res.status(400).json({ 
         error: 'Invalid request body',
         message: 'Settings data must be a valid object'
-      });
-      return;
-    }
-
-    // Validate release channel if provided
-    if (settingsData.releaseChannel && !['stable', 'beta', 'alpha'].includes(settingsData.releaseChannel)) {
-      res.status(400).json({ 
-        error: 'Invalid release channel',
-        message: 'Release channel must be one of: stable, beta, alpha'
       });
       return;
     }
@@ -321,7 +277,6 @@ router.get('/:pubkey', authUser, async (req: Request, res: Response): Promise<vo
       const defaultSettings = userSettingsRepository.getDefaultSettings();
       const response: UserSettingsResponse = {
         pubkey,
-        releaseChannel: defaultSettings.releaseChannel,
         socialSharing: defaultSettings.socialSharing,
         created: ts,
         modified: ts,
@@ -380,7 +335,7 @@ router.get('/:pubkey', authUser, async (req: Request, res: Response): Promise<vo
  *           schema:
  *             $ref: '#/components/schemas/UserSettingsUpdate'
  *           example:
- *             releaseChannel: "beta"
+ *             socialSharing: false
  *     responses:
  *       '200':
  *         description: Settings updated successfully
@@ -425,15 +380,6 @@ router.patch('/:pubkey', authUser, async (req: Request, res: Response): Promise<
       res.status(400).json({ 
         error: 'Invalid request body',
         message: 'Updates must be a non-empty object'
-      });
-      return;
-    }
-
-    // Validate release channel if provided
-    if (updates.releaseChannel && !['stable', 'beta', 'alpha'].includes(updates.releaseChannel)) {
-      res.status(400).json({ 
-        error: 'Invalid release channel',
-        message: 'Release channel must be one of: stable, beta, alpha'
       });
       return;
     }
@@ -555,87 +501,6 @@ router.delete('/:pubkey', authUser, async (req: Request, res: Response): Promise
     res.status(500).json({ 
       error: 'Internal server error',
       message: 'Failed to delete user settings'
-    });
-  }
-});
-
-/**
- * @openapi
- * /settings/admin/release-channel/{channel}:
- *   get:
- *     summary: Get users by release channel (admin endpoint)
- *     description: |
- *       Administrative endpoint to retrieve all users subscribed to a specific release channel.
- *       Returns user count and list of public keys for marketing or deployment purposes.
- *     tags:
- *       - Settings
- *     parameters:
- *       - name: channel
- *         in: path
- *         required: true
- *         description: Release channel to query
- *         schema:
- *           type: string
- *           enum: [stable, beta, alpha]
- *           example: "stable"
- *     responses:
- *       '200':
- *         description: Users retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UsersByReleaseChannel'
- *             example:
- *               success: true
- *               message: "Users with release channel 'stable' retrieved successfully"
- *               data:
- *                 releaseChannel: "stable"
- *                 userCount: 150
- *                 users: ["pubkey1", "pubkey2", "pubkey3"]
- *       '400':
- *         description: Invalid release channel parameter
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                 message:
- *                   type: string
- *       '500':
- *         description: Internal server error
- */
-router.get('/admin/release-channel/:channel', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { channel } = req.params;
-
-    // Validate release channel parameter
-    if (!['stable', 'beta', 'alpha'].includes(channel)) {
-      res.status(400).json({ 
-        error: 'Invalid release channel',
-        message: 'Release channel must be one of: stable, beta, alpha'
-      });
-      return;
-    }
-
-    // Get users by release channel
-    const userPubkeys = await userSettingsRepository.getUsersByReleaseChannel(channel as 'stable' | 'beta' | 'alpha');
-
-    res.status(200).json({
-      success: true,
-      message: `Users with release channel '${channel}' retrieved successfully`,
-      data: {
-        releaseChannel: channel,
-        userCount: userPubkeys.length,
-        users: userPubkeys
-      }
-    });
-  } catch (error) {
-    logger.error(`Error getting users by release channel: ${(error as Error).message}`);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: 'Failed to retrieve users by release channel'
     });
   }
 });

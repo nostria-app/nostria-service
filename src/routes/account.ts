@@ -515,6 +515,10 @@ router.post('/', signupRateLimit, async (req: AddAccountRequest, res: AddAccount
         return res.status(400).json({ error: 'Payment is for different pubkey' });
       }
 
+      if ((payment.purpose || 'subscription') !== 'subscription') {
+        return res.status(400).json({ error: 'Payment is not a subscription payment' });
+      }
+
       // Create or update user account with subscription
       const tierDetails = config.tiers[payment.tier as Tier];
 
@@ -661,6 +665,10 @@ router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: Renew
 
     if (payment.pubkey !== pubkey) {
       return res.status(400).json({ error: 'Payment is for different pubkey' });
+    }
+
+    if ((payment.purpose || 'subscription') !== 'subscription') {
+      return res.status(400).json({ error: 'Payment is not a subscription payment' });
     }
 
     if (!payment.isPaid) {
@@ -816,7 +824,7 @@ router.get('/subscription-history', authUser, async (req: NIP98AuthenticatedRequ
 
     // Filter to only paid payments and transform to subscription history items
     const subscriptionHistory: SubscriptionHistoryItemDto[] = payments
-      .filter((payment: any) => payment.isPaid && payment.paid)
+      .filter((payment: any) => (payment.purpose || 'subscription') === 'subscription' && payment.isPaid && payment.paid)
       .map((payment: any) => ({
         paymentId: payment.id,
         tier: payment.tier as Tier,

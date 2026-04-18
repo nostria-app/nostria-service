@@ -51,7 +51,6 @@ jest.mock('../database/PrismaUserSettingsRepository', () => ({
     connectXAccount: jest.fn(),
     disconnectXAccount: jest.fn(),
     deleteUserSettings: jest.fn(),
-    getUsersByReleaseChannel: jest.fn(),
     getDefaultSettings: jest.fn(),
   }))
 }));

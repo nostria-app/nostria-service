@@ -46,7 +46,6 @@ export interface IUserSettingsRepository {
   connectXAccount(pubkey: string, connectionData: any): Promise<any>;
   disconnectXAccount(pubkey: string): Promise<any>;
   deleteUserSettings(pubkey: string): Promise<void>;
-  getUsersByReleaseChannel(channel: 'stable' | 'beta' | 'alpha'): Promise<string[]>;
   getDefaultSettings(): any;
 }
 

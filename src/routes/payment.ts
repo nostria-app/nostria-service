@@ -7,13 +7,15 @@ import lightningService from '../services/LightningService';
 import { Tier, BillingCycle } from '../config/types';
 import RepositoryFactory from '../database/RepositoryFactory';
 import config from '../config';
-import { INVOICE_TTL, Payment } from '../models/payment';
+import { INVOICE_TTL, Payment, PaymentBillingCycle } from '../models/payment';
 import { now } from '../helpers/now';
 import requireNIP98Auth from '../middleware/requireNIP98Auth';
 import requireAdminAuth from '../middleware/requireAdminAuth';
+import GrokService from '../services/GrokService';
 
 // Get repository instance from factory
 const paymentRepository = RepositoryFactory.getPaymentRepository();
+const grokService = new GrokService();
 
 const paymentRateLimit = createRateLimit(
   1 * 60 * 1000, // 1 minute
@@ -144,7 +146,7 @@ interface PaymentDto {
   lnInvoice: string;
   lnAmountSat: number;
   tier: Tier;
-  billingCycle: BillingCycle;
+  billingCycle: PaymentBillingCycle;
   priceCents: number;
   pubkey: string;
   isPaid: boolean;
@@ -276,11 +278,14 @@ router.post('/', paymentRateLimit, async (req: CreatePaymentRequestType, res: Cr
       lnHash: hash,
       lnInvoice: invoice,
       lnAmountSat: amountSat,
+      purpose: 'subscription',
       tier: tierName,
       billingCycle,
       priceCents,
       pubkey,
+      creditNanosUsd: undefined,
       isPaid: false,
+      applied: undefined,
       expires: ts + INVOICE_TTL,
       created: ts,
       modified: ts,
@@ -351,6 +356,9 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
 
     // Check if already marked as paid
     if (payment.isPaid) {
+      if ((payment.purpose || 'subscription') === 'grok_topup' && !payment.applied) {
+        await grokService.applyTopUpPayment(payment.id, payment.pubkey);
+      }
       return res.json(toPaymentDto(payment, 'paid'));
     }
 
@@ -381,6 +389,10 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
       console.log('Updating payment status to paid:', item);
 
       await paymentRepository.update(item);
+
+      if ((payment.purpose || 'subscription') === 'grok_topup') {
+        await grokService.applyTopUpPayment(payment.id, payment.pubkey);
+      }
 
       logger.info(`Payment completed for ${payment.pubkey}, tier: ${payment.tier}, creating/updating account`);
 
@@ -527,7 +539,7 @@ const authUser = [authRateLimit, requireNIP98Auth];
 interface PaymentHistoryItemDto {
   id: string;
   tier: Tier;
-  billingCycle: BillingCycle;
+  billingCycle: PaymentBillingCycle;
   priceCents: number;
   lnAmountSat: number;
   status: PaymentStatus;
