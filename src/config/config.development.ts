@@ -120,6 +120,10 @@ const config: Config = {
             'wss://relay.primal.net'
           ],
       notificationPrivateKey: process.env.NOSTR_PREMIUM_NOTIFICATION_PRIVATE_KEY
+    },
+    nwc: {
+      connectionString: process.env.NOSTRIA_NWC_CONNECTION_STRING,
+      timeoutMs: process.env.NOSTRIA_NWC_TIMEOUT_MS ? Number(process.env.NOSTRIA_NWC_TIMEOUT_MS) : 30000
     }
   };
 

@@ -5,6 +5,7 @@ import PrismaXPostRepository from './PrismaXPostRepository';
 import PrismaUserSettingsRepository from './PrismaUserSettingsRepository';
 import PrismaNotificationSubscriptionRepository from './PrismaNotificationSubscriptionRepository';
 import PrismaNotificationSettingsRepository from './PrismaNotificationSettingsRepository';
+import PrismaInvestorRepository from './PrismaInvestorRepository';
 
 export interface IAccountRepository {
   create(account: any): Promise<any>;
@@ -33,6 +34,7 @@ export interface IPaymentRepository {
   get(id: string, pubkey: string): Promise<any | null>;
   getAllPayments(limit?: number): Promise<any[]>;
   getPaymentsByPubkey(pubkey: string, limit?: number): Promise<any[]>;
+  getPaidSubscriptionPaymentsBetween(start: number, end: number): Promise<any[]>;
 }
 
 export interface IUserSettingsRepository {
@@ -72,6 +74,24 @@ export interface IXPostRepository {
   getUsageSummaries(pubkeys: string[]): Promise<Record<string, any>>;
 }
 
+export interface IInvestorRepository {
+  listInvestors(includeInactive?: boolean): Promise<any[]>;
+  getInvestorByPubkey(pubkey: string): Promise<any | null>;
+  createInvestor(input: any): Promise<any>;
+  updateInvestor(pubkey: string, input: any): Promise<any>;
+  deleteInvestor(pubkey: string): Promise<void>;
+  upsertRevenueSharePeriod(input: any): Promise<any>;
+  listRevenueSharePeriods(limit?: number): Promise<any[]>;
+  updateRevenueSharePeriodStatus(id: string, status: string): Promise<any>;
+  upsertPayout(input: any): Promise<any>;
+  getPayoutById(id: string): Promise<any | null>;
+  getPayoutByInvestorAndPeriod(investorPubkey: string, periodId: string): Promise<any | null>;
+  updatePayout(id: string, input: any): Promise<any>;
+  listPayoutsByInvestor(pubkey: string, limit?: number): Promise<any[]>;
+  listPayoutsByPeriod(periodId: string): Promise<any[]>;
+  listRecentPayouts(limit?: number): Promise<any[]>;
+}
+
 class RepositoryFactory {
   private static prismaAccountRepository?: PrismaAccountRepository;
   private static prismaBackupJobRepository?: PrismaBackupJobRepository;
@@ -80,6 +100,7 @@ class RepositoryFactory {
   private static prismaUserSettingsRepository?: PrismaUserSettingsRepository;
   private static prismaNotificationSubscriptionRepository?: PrismaNotificationSubscriptionRepository;
   private static prismaNotificationSettingsRepository?: PrismaNotificationSettingsRepository;
+  private static prismaInvestorRepository?: PrismaInvestorRepository;
 
   static getAccountRepository(): IAccountRepository {
     if (!this.prismaAccountRepository) {
@@ -128,6 +149,13 @@ class RepositoryFactory {
       this.prismaNotificationSettingsRepository = new PrismaNotificationSettingsRepository();
     }
     return this.prismaNotificationSettingsRepository;
+  }
+
+  static getInvestorRepository(): IInvestorRepository {
+    if (!this.prismaInvestorRepository) {
+      this.prismaInvestorRepository = new PrismaInvestorRepository();
+    }
+    return this.prismaInvestorRepository;
   }
 
   // Health check method

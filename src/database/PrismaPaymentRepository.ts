@@ -140,6 +140,30 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
     }
   }
 
+  async getPaidSubscriptionPaymentsBetween(start: number, end: number): Promise<Payment[]> {
+    try {
+      const results = await this.prisma.payment.findMany({
+        where: {
+          isPaid: true,
+          purpose: 'subscription',
+          tier: {
+            not: 'free',
+          },
+          paid: {
+            gte: BigInt(start),
+            lt: BigInt(end),
+          },
+        },
+        orderBy: { paid: 'asc' },
+      });
+
+      return results.map((result: any) => this.transformPrismaPaymentToPayment(result));
+    } catch (error) {
+      logger.error('Failed to get paid subscription payments by period:', error);
+      throw new Error(`Failed to get payments: ${(error as Error).message}`);
+    }
+  }
+
   async deletePayment(id: string, pubkey: string): Promise<void> {
     try {
       await this.prisma.payment.delete({

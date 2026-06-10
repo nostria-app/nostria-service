@@ -112,6 +112,67 @@ model Payment {
   @@map("payments")
 }
 
+model Investor {
+  id                String           @id
+  pubkey            String           @unique
+  npub              String?
+  displayName       String?
+  investmentCents   Int              @default(0)
+  shareBasisPoints  Int              @default(0)
+  lightningAddress  String?
+  status            String           @default("active")
+  created           BigInt
+  modified          BigInt
+  payouts           InvestorPayout[]
+
+  @@index([status])
+  @@map("investors")
+}
+
+model RevenueSharePeriod {
+  id                      String           @id
+  period                  String           @unique
+  grossRevenueCents       Int
+  investorPoolCents       Int
+  revenueShareBasisPoints Int              @default(5000)
+  status                  String           @default("draft")
+  notes                   String?
+  created                 BigInt
+  modified                BigInt
+  payouts                 InvestorPayout[]
+
+  @@index([period])
+  @@index([status])
+  @@map("revenue_share_periods")
+}
+
+model InvestorPayout {
+  id                String             @id
+  investorPubkey    String
+  periodId          String
+  shareBasisPoints  Int
+  revenueCents      Int
+  amountCents       Int
+  amountSat         Int?
+  lnInvoice         String?
+  lnPaymentHash     String?
+  nwcPreimage       String?
+  nwcResponse       Json?
+  status            String             @default("pending")
+  errorMessage      String?
+  paid              BigInt?
+  created           BigInt
+  modified          BigInt
+  investor          Investor           @relation(fields: [investorPubkey], references: [pubkey], onDelete: Cascade)
+  period            RevenueSharePeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@unique([investorPubkey, periodId])
+  @@index([investorPubkey])
+  @@index([periodId])
+  @@index([status])
+  @@map("investor_payouts")
+}
+
 model GrokBalance {
   pubkey              String  @id
   balanceNanosUsd     BigInt

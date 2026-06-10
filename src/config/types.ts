@@ -49,4 +49,8 @@ export type Config = {
     relays: string[];
     notificationPrivateKey?: string; // Private key for "Nostria Premium" account to post notifications
   };
+  nwc?: {
+    connectionString?: string;
+    timeoutMs: number;
+  };
 }

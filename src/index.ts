@@ -26,6 +26,7 @@ import swaggerRoutes from './routes/swagger';
 import usersRoutes from './routes/users';
 import xRoutes from './routes/x';
 import grokRoutes from './routes/grok';
+import investorRoutes from './routes/investors';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -34,6 +35,7 @@ import logger from './utils/logger';
 
 // Import services
 import NostrZapService from './services/NostrZapService';
+import nostrWalletConnectService from './services/NostrWalletConnectService';
 
 // Initialize Nostr Zap Service
 const nostrZapService = new NostrZapService();
@@ -131,6 +133,7 @@ app.use('/api/backup', backupRoutes); // Backup management endpoints
 app.use('/api/settings', settingsRoutes); // User settings endpoints
 app.use('/api/x', xRoutes); // X dual-posting endpoints
 app.use('/api/grok', grokRoutes); // xAI/Grok proxy and balance endpoints
+app.use('/api/investors', investorRoutes); // Investor dashboard and revenue sharing endpoints
 app.use('/api/users', apiKeyAuth, usersRoutes); // Protected users endpoint
 
 // Error handling middleware
@@ -144,6 +147,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
   try {
     // Stop Nostr Zap Service
     nostrZapService.stop();
+    nostrWalletConnectService.close();
     
     await PrismaClientSingleton.disconnect();
     logger.info('Database connections closed successfully');
