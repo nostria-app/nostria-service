@@ -186,6 +186,7 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
           tier: true,
           billingCycle: true,
           priceCents: true,
+          lnAmountSat: true,
           paid: true,
         },
       });
@@ -193,14 +194,21 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
       const stats = {
         paidSubscriptionPayments: payments.length,
         paidSubscriptionRevenueCents: 0,
+        paidSubscriptionRevenueSat: 0,
         averagePaidSubscriptionCents: 0,
+        averagePaidSubscriptionSat: 0,
         currentMonthRevenueCents: 0,
+        currentMonthRevenueSat: 0,
         last30DaysRevenueCents: 0,
+        last30DaysRevenueSat: 0,
         last90DaysRevenueCents: 0,
+        last90DaysRevenueSat: 0,
         last30DaysPayments: 0,
         last90DaysPayments: 0,
         tierRevenueCents: {} as Record<string, number>,
+        tierRevenueSat: {} as Record<string, number>,
         billingCycleRevenueCents: {} as Record<string, number>,
+        billingCycleRevenueSat: {} as Record<string, number>,
         billingCyclePaymentCounts: {} as Record<string, number>,
       };
 
@@ -209,29 +217,39 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
         const billingCycle = payment.billingCycle || 'unknown';
         const paid = payment.paid ? Number(payment.paid) : 0;
         const priceCents = payment.priceCents || 0;
+        const amountSat = payment.lnAmountSat || 0;
 
         stats.paidSubscriptionRevenueCents += priceCents;
+        stats.paidSubscriptionRevenueSat += amountSat;
         stats.tierRevenueCents[tier] = (stats.tierRevenueCents[tier] || 0) + priceCents;
+        stats.tierRevenueSat[tier] = (stats.tierRevenueSat[tier] || 0) + amountSat;
         stats.billingCycleRevenueCents[billingCycle] = (stats.billingCycleRevenueCents[billingCycle] || 0) + priceCents;
+        stats.billingCycleRevenueSat[billingCycle] = (stats.billingCycleRevenueSat[billingCycle] || 0) + amountSat;
         stats.billingCyclePaymentCounts[billingCycle] = (stats.billingCyclePaymentCounts[billingCycle] || 0) + 1;
 
         if (paid >= currentMonthStart) {
           stats.currentMonthRevenueCents += priceCents;
+          stats.currentMonthRevenueSat += amountSat;
         }
 
         if (paid >= thirtyDaysAgo) {
           stats.last30DaysRevenueCents += priceCents;
+          stats.last30DaysRevenueSat += amountSat;
           stats.last30DaysPayments += 1;
         }
 
         if (paid >= ninetyDaysAgo) {
           stats.last90DaysRevenueCents += priceCents;
+          stats.last90DaysRevenueSat += amountSat;
           stats.last90DaysPayments += 1;
         }
       }
 
       stats.averagePaidSubscriptionCents = payments.length > 0
         ? Math.round(stats.paidSubscriptionRevenueCents / payments.length)
+        : 0;
+      stats.averagePaidSubscriptionSat = payments.length > 0
+        ? Math.round(stats.paidSubscriptionRevenueSat / payments.length)
         : 0;
 
       return stats;

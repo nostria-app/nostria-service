@@ -46,6 +46,11 @@ interface PayInvestorPayoutRequest {
   amountSat?: number;
 }
 
+interface RevenueAmount {
+  cents: number;
+  sats: number;
+}
+
 function isAdmin(pubkey: string): boolean {
   return Boolean(config.admin.pubkeys?.includes(pubkey));
 }
@@ -238,18 +243,21 @@ function getRecentPeriods(count: number): string[] {
   return periods;
 }
 
-async function calculatePaidRevenueCents(period: string): Promise<number> {
+async function calculatePaidRevenue(period: string): Promise<RevenueAmount> {
   const bounds = getPeriodBounds(period);
   const payments = await paymentRepository.getPaidSubscriptionPaymentsBetween(bounds.start, bounds.end) as Payment[];
-  return payments.reduce((total, payment) => total + payment.priceCents, 0);
+  return payments.reduce((total, payment) => ({
+    cents: total.cents + (payment.priceCents || 0),
+    sats: total.sats + (payment.lnAmountSat || 0),
+  }), { cents: 0, sats: 0 });
 }
 
-function calculateInvestorPool(grossRevenueCents: number, revenueShareBasisPoints: number): number {
-  return Math.round((grossRevenueCents * revenueShareBasisPoints) / 10000);
+function calculateInvestorPool(amount: number, revenueShareBasisPoints: number): number {
+  return Math.round((amount * revenueShareBasisPoints) / 10000);
 }
 
-function calculateInvestorPayout(poolCents: number, sharePartsPerMillion: number): number {
-  return Math.round((poolCents * sharePartsPerMillion) / SHARE_PARTS_PER_MILLION_TOTAL);
+function calculateInvestorPayout(poolAmount: number, sharePartsPerMillion: number): number {
+  return Math.round((poolAmount * sharePartsPerMillion) / SHARE_PARTS_PER_MILLION_TOTAL);
 }
 
 async function getPlatformStats(): Promise<PlatformStats> {
@@ -276,26 +284,34 @@ async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryIte
 
   for (const period of getRecentPeriods(12)) {
     const existingPeriod = periodMap.get(period);
+    const paidRevenue = await calculatePaidRevenue(period);
 
     if (existingPeriod) {
       const payout = payoutMap.get(period);
+      const investorPoolSat = calculateInvestorPool(paidRevenue.sats, existingPeriod.revenueShareBasisPoints);
       history.push({
         period,
         grossRevenueCents: existingPeriod.grossRevenueCents,
+        grossRevenueSat: paidRevenue.sats,
         investorPoolCents: existingPeriod.investorPoolCents,
+        investorPoolSat,
         investorPayoutCents: investor ? payout?.amountCents || 0 : existingPeriod.investorPoolCents,
+        investorPayoutSat: investor ? payout?.amountSat || calculateInvestorPayout(investorPoolSat, investor.sharePartsPerMillion) : investorPoolSat,
         status: existingPeriod.status,
       });
       continue;
     }
 
-    const grossRevenueCents = await calculatePaidRevenueCents(period);
-    const investorPoolCents = calculateInvestorPool(grossRevenueCents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+    const investorPoolCents = calculateInvestorPool(paidRevenue.cents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+    const investorPoolSat = calculateInvestorPool(paidRevenue.sats, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
     history.push({
       period,
-      grossRevenueCents,
+      grossRevenueCents: paidRevenue.cents,
+      grossRevenueSat: paidRevenue.sats,
       investorPoolCents,
+      investorPoolSat,
       investorPayoutCents: investor ? calculateInvestorPayout(investorPoolCents, investor.sharePartsPerMillion) : investorPoolCents,
+      investorPayoutSat: investor ? calculateInvestorPayout(investorPoolSat, investor.sharePartsPerMillion) : investorPoolSat,
       status: 'estimated',
     });
   }
@@ -308,20 +324,32 @@ async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashb
   const paidPayoutsCents = payouts
     .filter(payout => payout.status === 'paid')
     .reduce((total, payout) => total + payout.amountCents, 0);
+  const paidPayoutsSat = payouts
+    .filter(payout => payout.status === 'paid')
+    .reduce((total, payout) => total + (payout.amountSat || 0), 0);
   const pendingPayoutsCents = payouts
     .filter(payout => payout.status !== 'paid')
     .reduce((total, payout) => total + payout.amountCents, 0);
-  const currentRevenueCents = await calculatePaidRevenueCents(getCurrentPeriod());
-  const currentPoolCents = calculateInvestorPool(currentRevenueCents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+  const pendingPayoutsSat = payouts
+    .filter(payout => payout.status !== 'paid')
+    .reduce((total, payout) => total + (payout.amountSat || 0), 0);
+  const currentRevenue = await calculatePaidRevenue(getCurrentPeriod());
+  const currentPoolCents = calculateInvestorPool(currentRevenue.cents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+  const currentPoolSat = calculateInvestorPool(currentRevenue.sats, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
   const expectedMonthlyPayoutCents = calculateInvestorPayout(currentPoolCents, investor.sharePartsPerMillion);
+  const expectedMonthlyPayoutSat = calculateInvestorPayout(currentPoolSat, investor.sharePartsPerMillion);
 
   return {
     investor,
     totals: {
       paidPayoutsCents,
+      paidPayoutsSat,
       pendingPayoutsCents,
+      pendingPayoutsSat,
       lifetimePayoutsCents: paidPayoutsCents + pendingPayoutsCents,
+      lifetimePayoutsSat: paidPayoutsSat + pendingPayoutsSat,
       expectedMonthlyPayoutCents,
+      expectedMonthlyPayoutSat,
     },
     investmentStats: {
       investmentCents: investor.investmentCents,
@@ -339,8 +367,9 @@ async function buildAdminDashboard(): Promise<InvestorAdminDashboard> {
   const investors = await investorRepository.listInvestors(true) as Investor[];
   const activeInvestors = investors.filter(investor => investor.status === 'active');
   const recentPayouts = await investorRepository.listRecentPayouts(100) as InvestorPayout[];
-  const currentMonthRevenueCents = await calculatePaidRevenueCents(getCurrentPeriod());
-  const currentMonthInvestorPoolCents = calculateInvestorPool(currentMonthRevenueCents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+  const currentMonthRevenue = await calculatePaidRevenue(getCurrentPeriod());
+  const currentMonthInvestorPoolCents = calculateInvestorPool(currentMonthRevenue.cents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
+  const currentMonthInvestorPoolSat = calculateInvestorPool(currentMonthRevenue.sats, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
 
   return {
     totals: {
@@ -349,14 +378,22 @@ async function buildAdminDashboard(): Promise<InvestorAdminDashboard> {
       totalInvestmentCents: investors.reduce((total, investor) => total + investor.investmentCents, 0),
       totalShareBasisPoints: Math.round(activeInvestors.reduce((total, investor) => total + investor.sharePartsPerMillion, 0) / 100),
       totalSharePartsPerMillion: activeInvestors.reduce((total, investor) => total + investor.sharePartsPerMillion, 0),
-      currentMonthRevenueCents,
+      currentMonthRevenueCents: currentMonthRevenue.cents,
+      currentMonthRevenueSat: currentMonthRevenue.sats,
       currentMonthInvestorPoolCents,
+      currentMonthInvestorPoolSat,
       pendingPayoutsCents: recentPayouts
         .filter(payout => payout.status !== 'paid')
         .reduce((total, payout) => total + payout.amountCents, 0),
+      pendingPayoutsSat: recentPayouts
+        .filter(payout => payout.status !== 'paid')
+        .reduce((total, payout) => total + (payout.amountSat || 0), 0),
       paidPayoutsCents: recentPayouts
         .filter(payout => payout.status === 'paid')
         .reduce((total, payout) => total + payout.amountCents, 0),
+      paidPayoutsSat: recentPayouts
+        .filter(payout => payout.status === 'paid')
+        .reduce((total, payout) => total + (payout.amountSat || 0), 0),
     },
     investors,
     platformStats: await getPlatformStats(),
@@ -477,11 +514,12 @@ router.post('/admin/periods/calculate', requireAdminAuth, async (req: Request<{}
     const revenueShareBasisPoints = req.body.revenueShareBasisPoints ?? DEFAULT_REVENUE_SHARE_BASIS_POINTS;
     assertBasisPoints(revenueShareBasisPoints, 'revenueShareBasisPoints');
 
-    const grossRevenueCents = await calculatePaidRevenueCents(period);
-    const investorPoolCents = calculateInvestorPool(grossRevenueCents, revenueShareBasisPoints);
+    const grossRevenue = await calculatePaidRevenue(period);
+    const investorPoolCents = calculateInvestorPool(grossRevenue.cents, revenueShareBasisPoints);
+    const investorPoolSat = calculateInvestorPool(grossRevenue.sats, revenueShareBasisPoints);
     const revenueSharePeriod = await investorRepository.upsertRevenueSharePeriod({
       period,
-      grossRevenueCents,
+      grossRevenueCents: grossRevenue.cents,
       investorPoolCents,
       revenueShareBasisPoints,
       status: 'calculated',
@@ -505,6 +543,7 @@ router.post('/admin/periods/calculate', requireAdminAuth, async (req: Request<{}
         sharePartsPerMillion: investor.sharePartsPerMillion,
         revenueCents: investorPoolCents,
         amountCents: calculateInvestorPayout(investorPoolCents, investor.sharePartsPerMillion),
+        amountSat: calculateInvestorPayout(investorPoolSat, investor.sharePartsPerMillion),
       }) as InvestorPayout;
       payouts.push(payout);
     }

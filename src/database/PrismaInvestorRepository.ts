@@ -237,6 +237,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     sharePartsPerMillion: number;
     revenueCents: number;
     amountCents: number;
+    amountSat?: number;
   }): Promise<InvestorPayout> {
     try {
       const ts = now();
@@ -256,6 +257,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
           sharePartsPerMillion: input.sharePartsPerMillion,
           revenueCents: input.revenueCents,
           amountCents: input.amountCents,
+          amountSat: input.amountSat,
           status: 'pending',
           created: BigInt(ts),
           modified: BigInt(ts),
@@ -265,6 +267,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
           sharePartsPerMillion: input.sharePartsPerMillion,
           revenueCents: input.revenueCents,
           amountCents: input.amountCents,
+          amountSat: input.amountSat,
           modified: BigInt(ts),
         },
         include: {
