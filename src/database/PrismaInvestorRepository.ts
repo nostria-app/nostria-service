@@ -24,6 +24,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
       displayName: prismaInvestor.displayName || undefined,
       investmentCents: prismaInvestor.investmentCents,
       shareBasisPoints: prismaInvestor.shareBasisPoints,
+      sharePartsPerMillion: prismaInvestor.sharePartsPerMillion,
       lightningAddress: prismaInvestor.lightningAddress || undefined,
       status: prismaInvestor.status,
       created: Number(prismaInvestor.created),
@@ -51,6 +52,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
       investorPubkey: prismaPayout.investorPubkey,
       periodId: prismaPayout.periodId,
       shareBasisPoints: prismaPayout.shareBasisPoints,
+      sharePartsPerMillion: prismaPayout.sharePartsPerMillion,
       revenueCents: prismaPayout.revenueCents,
       amountCents: prismaPayout.amountCents,
       amountSat: prismaPayout.amountSat || undefined,
@@ -74,7 +76,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
         where: includeInactive ? undefined : { status: 'active' },
         orderBy: [
           { status: 'asc' },
-          { shareBasisPoints: 'desc' },
+          { sharePartsPerMillion: 'desc' },
           { created: 'asc' },
         ],
       });
@@ -110,6 +112,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
           displayName: input.displayName || null,
           investmentCents: input.investmentCents || 0,
           shareBasisPoints: input.shareBasisPoints || 0,
+          sharePartsPerMillion: input.sharePartsPerMillion || 0,
           lightningAddress: input.lightningAddress || null,
           status: input.status || 'active',
           created: BigInt(ts),
@@ -132,6 +135,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
           displayName: input.displayName,
           investmentCents: input.investmentCents,
           shareBasisPoints: input.shareBasisPoints,
+          sharePartsPerMillion: input.sharePartsPerMillion,
           lightningAddress: input.lightningAddress,
           status: input.status,
           modified: BigInt(now()),
@@ -227,6 +231,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     investorPubkey: string;
     periodId: string;
     shareBasisPoints: number;
+    sharePartsPerMillion: number;
     revenueCents: number;
     amountCents: number;
   }): Promise<InvestorPayout> {
@@ -244,6 +249,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
           investorPubkey: input.investorPubkey,
           periodId: input.periodId,
           shareBasisPoints: input.shareBasisPoints,
+          sharePartsPerMillion: input.sharePartsPerMillion,
           revenueCents: input.revenueCents,
           amountCents: input.amountCents,
           status: 'pending',
@@ -252,6 +258,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
         },
         update: {
           shareBasisPoints: input.shareBasisPoints,
+          sharePartsPerMillion: input.sharePartsPerMillion,
           revenueCents: input.revenueCents,
           amountCents: input.amountCents,
           modified: BigInt(ts),

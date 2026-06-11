@@ -119,6 +119,7 @@ model Investor {
   displayName       String?
   investmentCents   Int              @default(0)
   shareBasisPoints  Int              @default(0)
+  sharePartsPerMillion Int           @default(0)
   lightningAddress  String?
   status            String           @default("active")
   created           BigInt
@@ -151,6 +152,7 @@ model InvestorPayout {
   investorPubkey    String
   periodId          String
   shareBasisPoints  Int
+  sharePartsPerMillion Int
   revenueCents      Int
   amountCents       Int
   amountSat         Int?

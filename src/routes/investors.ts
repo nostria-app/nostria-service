@@ -25,6 +25,7 @@ const router = express.Router();
 const investorRepository = RepositoryFactory.getInvestorRepository();
 const paymentRepository = RepositoryFactory.getPaymentRepository();
 const DEFAULT_REVENUE_SHARE_BASIS_POINTS = 5000;
+const SHARE_PARTS_PER_MILLION_TOTAL = 1_000_000;
 
 interface InvestorSessionResponse {
   pubkey: string;
@@ -50,6 +51,12 @@ function isAdmin(pubkey: string): boolean {
 function assertBasisPoints(value: number, fieldName: string): void {
   if (!Number.isInteger(value) || value < 0 || value > 10000) {
     throw new Error(`${fieldName} must be an integer between 0 and 10000`);
+  }
+}
+
+function assertSharePartsPerMillion(value: number, fieldName: string): void {
+  if (!Number.isInteger(value) || value < 0 || value > SHARE_PARTS_PER_MILLION_TOTAL) {
+    throw new Error(`${fieldName} must be an integer between 0 and ${SHARE_PARTS_PER_MILLION_TOTAL}`);
   }
 }
 
@@ -83,9 +90,10 @@ function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
   }
 
   const investmentCents = body.investmentCents ?? 0;
-  const shareBasisPoints = body.shareBasisPoints ?? 0;
+  const sharePartsPerMillion = body.sharePartsPerMillion ?? ((body.shareBasisPoints ?? 0) * 100);
+  const shareBasisPoints = Math.round(sharePartsPerMillion / 100);
   assertCents(investmentCents, 'investmentCents');
-  assertBasisPoints(shareBasisPoints, 'shareBasisPoints');
+  assertSharePartsPerMillion(sharePartsPerMillion, 'sharePartsPerMillion');
 
   const status = body.status || 'active';
   if (status !== 'active' && status !== 'inactive') {
@@ -98,6 +106,7 @@ function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
     displayName: typeof body.displayName === 'string' ? body.displayName.trim() || undefined : undefined,
     investmentCents,
     shareBasisPoints,
+    sharePartsPerMillion,
     lightningAddress: typeof body.lightningAddress === 'string' ? body.lightningAddress.trim() || undefined : undefined,
     status,
   };
@@ -122,6 +131,13 @@ function normalizeInvestorUpdate(body: Partial<InvestorInput>): Partial<Investor
   if (body.shareBasisPoints !== undefined) {
     assertBasisPoints(body.shareBasisPoints, 'shareBasisPoints');
     update.shareBasisPoints = body.shareBasisPoints;
+    update.sharePartsPerMillion = body.shareBasisPoints * 100;
+  }
+
+  if (body.sharePartsPerMillion !== undefined) {
+    assertSharePartsPerMillion(body.sharePartsPerMillion, 'sharePartsPerMillion');
+    update.sharePartsPerMillion = body.sharePartsPerMillion;
+    update.shareBasisPoints = Math.round(body.sharePartsPerMillion / 100);
   }
 
   if (body.lightningAddress !== undefined) {
@@ -184,8 +200,8 @@ function calculateInvestorPool(grossRevenueCents: number, revenueShareBasisPoint
   return Math.round((grossRevenueCents * revenueShareBasisPoints) / 10000);
 }
 
-function calculateInvestorPayout(poolCents: number, shareBasisPoints: number): number {
-  return Math.round((poolCents * shareBasisPoints) / 10000);
+function calculateInvestorPayout(poolCents: number, sharePartsPerMillion: number): number {
+  return Math.round((poolCents * sharePartsPerMillion) / SHARE_PARTS_PER_MILLION_TOTAL);
 }
 
 async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryItem[]> {
@@ -218,7 +234,7 @@ async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryIte
       period,
       grossRevenueCents,
       investorPoolCents,
-      investorPayoutCents: investor ? calculateInvestorPayout(investorPoolCents, investor.shareBasisPoints) : investorPoolCents,
+      investorPayoutCents: investor ? calculateInvestorPayout(investorPoolCents, investor.sharePartsPerMillion) : investorPoolCents,
       status: 'estimated',
     });
   }
@@ -236,7 +252,7 @@ async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashb
     .reduce((total, payout) => total + payout.amountCents, 0);
   const currentRevenueCents = await calculatePaidRevenueCents(getCurrentPeriod());
   const currentPoolCents = calculateInvestorPool(currentRevenueCents, DEFAULT_REVENUE_SHARE_BASIS_POINTS);
-  const expectedMonthlyPayoutCents = calculateInvestorPayout(currentPoolCents, investor.shareBasisPoints);
+  const expectedMonthlyPayoutCents = calculateInvestorPayout(currentPoolCents, investor.sharePartsPerMillion);
 
   return {
     investor,
@@ -249,7 +265,8 @@ async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashb
     investmentStats: {
       investmentCents: investor.investmentCents,
       shareBasisPoints: investor.shareBasisPoints,
-      ownershipPercentage: investor.shareBasisPoints / 100,
+      sharePartsPerMillion: investor.sharePartsPerMillion,
+      ownershipPercentage: investor.sharePartsPerMillion / 10000,
       payoutMultiple: investor.investmentCents > 0 ? paidPayoutsCents / investor.investmentCents : 0,
     },
     revenueHistory: await getRevenueHistory(investor),
@@ -269,7 +286,8 @@ async function buildAdminDashboard(): Promise<InvestorAdminDashboard> {
       investorCount: investors.length,
       activeInvestorCount: activeInvestors.length,
       totalInvestmentCents: investors.reduce((total, investor) => total + investor.investmentCents, 0),
-      totalShareBasisPoints: activeInvestors.reduce((total, investor) => total + investor.shareBasisPoints, 0),
+      totalShareBasisPoints: Math.round(activeInvestors.reduce((total, investor) => total + investor.sharePartsPerMillion, 0) / 100),
+      totalSharePartsPerMillion: activeInvestors.reduce((total, investor) => total + investor.sharePartsPerMillion, 0),
       currentMonthRevenueCents,
       currentMonthInvestorPoolCents,
       pendingPayoutsCents: recentPayouts
@@ -421,8 +439,9 @@ router.post('/admin/periods/calculate', requireAdminAuth, async (req: Request<{}
         investorPubkey: investor.pubkey,
         periodId: revenueSharePeriod.id,
         shareBasisPoints: investor.shareBasisPoints,
+        sharePartsPerMillion: investor.sharePartsPerMillion,
         revenueCents: investorPoolCents,
-        amountCents: calculateInvestorPayout(investorPoolCents, investor.shareBasisPoints),
+        amountCents: calculateInvestorPayout(investorPoolCents, investor.sharePartsPerMillion),
       }) as InvestorPayout;
       payouts.push(payout);
     }
