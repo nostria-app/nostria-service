@@ -328,7 +328,6 @@ async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashb
       shareBasisPoints: investor.shareBasisPoints,
       sharePartsPerMillion: investor.sharePartsPerMillion,
       ownershipPercentage: investor.sharePartsPerMillion / 10000,
-      payoutMultiple: investor.investmentCents > 0 ? paidPayoutsCents / investor.investmentCents : 0,
     },
     platformStats: await getPlatformStats(),
     revenueHistory: await getRevenueHistory(investor),

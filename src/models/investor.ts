@@ -117,7 +117,6 @@ export interface InvestorDashboard {
     shareBasisPoints: number;
     sharePartsPerMillion: number;
     ownershipPercentage: number;
-    payoutMultiple: number;
   };
   platformStats: PlatformStats;
   revenueHistory: RevenueHistoryItem[];
