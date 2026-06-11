@@ -13,6 +13,7 @@ import {
   InvestorInput,
   InvestorPayout,
   InvestorStatus,
+  PlatformStats,
   RevenueHistoryItem,
   RevenueSharePeriod,
 } from '../models/investor';
@@ -22,6 +23,7 @@ import logger from '../utils/logger';
 import { NIP98AuthenticatedRequest } from './types';
 
 const router = express.Router();
+const accountRepository = RepositoryFactory.getAccountRepository();
 const investorRepository = RepositoryFactory.getInvestorRepository();
 const paymentRepository = RepositoryFactory.getPaymentRepository();
 const DEFAULT_REVENUE_SHARE_BASIS_POINTS = 5000;
@@ -250,6 +252,19 @@ function calculateInvestorPayout(poolCents: number, sharePartsPerMillion: number
   return Math.round((poolCents * sharePartsPerMillion) / SHARE_PARTS_PER_MILLION_TOTAL);
 }
 
+async function getPlatformStats(): Promise<PlatformStats> {
+  const [accounts, payments] = await Promise.all([
+    accountRepository.getAccountStats(),
+    paymentRepository.getSubscriptionPaymentStats(),
+  ]);
+
+  return {
+    generatedAt: now(),
+    accounts,
+    payments,
+  };
+}
+
 async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryItem[]> {
   const periods = await investorRepository.listRevenueSharePeriods(24) as RevenueSharePeriod[];
   const periodMap = new Map(periods.map(period => [period.period, period]));
@@ -315,6 +330,7 @@ async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashb
       ownershipPercentage: investor.sharePartsPerMillion / 10000,
       payoutMultiple: investor.investmentCents > 0 ? paidPayoutsCents / investor.investmentCents : 0,
     },
+    platformStats: await getPlatformStats(),
     revenueHistory: await getRevenueHistory(investor),
     payouts,
   };
@@ -344,6 +360,7 @@ async function buildAdminDashboard(): Promise<InvestorAdminDashboard> {
         .reduce((total, payout) => total + payout.amountCents, 0),
     },
     investors,
+    platformStats: await getPlatformStats(),
     revenueHistory: await getRevenueHistory(),
     recentPayouts,
   };

@@ -71,6 +71,39 @@ export interface RevenueHistoryItem {
   status: RevenueSharePeriodStatus | 'estimated';
 }
 
+export interface PlatformStats {
+  generatedAt: number;
+  accounts: {
+    total: number;
+    free: number;
+    paid: number;
+    activeSubscriptions: number;
+    expiredSubscriptions: number;
+    withUsername: number;
+    newLast7Days: number;
+    newLast30Days: number;
+    activeLast7Days: number;
+    activeLast30Days: number;
+    tierCounts: Record<string, number>;
+    activeTierCounts: Record<string, number>;
+    expiredTierCounts: Record<string, number>;
+    billingCycleCounts: Record<string, number>;
+  };
+  payments: {
+    paidSubscriptionPayments: number;
+    paidSubscriptionRevenueCents: number;
+    averagePaidSubscriptionCents: number;
+    currentMonthRevenueCents: number;
+    last30DaysRevenueCents: number;
+    last90DaysRevenueCents: number;
+    last30DaysPayments: number;
+    last90DaysPayments: number;
+    tierRevenueCents: Record<string, number>;
+    billingCycleRevenueCents: Record<string, number>;
+    billingCyclePaymentCounts: Record<string, number>;
+  };
+}
+
 export interface InvestorDashboard {
   investor: Investor;
   totals: {
@@ -86,6 +119,7 @@ export interface InvestorDashboard {
     ownershipPercentage: number;
     payoutMultiple: number;
   };
+  platformStats: PlatformStats;
   revenueHistory: RevenueHistoryItem[];
   payouts: InvestorPayout[];
 }
@@ -103,6 +137,7 @@ export interface InvestorAdminDashboard {
     paidPayoutsCents: number;
   };
   investors: Investor[];
+  platformStats: PlatformStats;
   revenueHistory: RevenueHistoryItem[];
   recentPayouts: InvestorPayout[];
 }

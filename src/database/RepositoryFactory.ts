@@ -15,6 +15,7 @@ export interface IAccountRepository {
   update(account: any): Promise<any>;
   updateLoginDate(pubkey: string): Promise<void>;
   getAllAccounts(limit?: number): Promise<any[]>;
+  getAccountStats(): Promise<any>;
   deleteAccount(pubkey: string): Promise<void>;
   hasPremiumSubscription(pubkey: string): Promise<boolean>;
 }
@@ -35,6 +36,7 @@ export interface IPaymentRepository {
   getAllPayments(limit?: number): Promise<any[]>;
   getPaymentsByPubkey(pubkey: string, limit?: number): Promise<any[]>;
   getPaidSubscriptionPaymentsBetween(start: number, end: number): Promise<any[]>;
+  getSubscriptionPaymentStats(): Promise<any>;
 }
 
 export interface IUserSettingsRepository {

@@ -164,6 +164,83 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
     }
   }
 
+  async getSubscriptionPaymentStats(): Promise<any> {
+    try {
+      const ts = now();
+      const date = new Date();
+      const currentMonthStart = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+      const thirtyDaysAgo = ts - (30 * 24 * 60 * 60 * 1000);
+      const ninetyDaysAgo = ts - (90 * 24 * 60 * 60 * 1000);
+      const payments = await this.prisma.payment.findMany({
+        where: {
+          isPaid: true,
+          purpose: 'subscription',
+          tier: {
+            not: 'free',
+          },
+          paid: {
+            not: null,
+          },
+        },
+        select: {
+          tier: true,
+          billingCycle: true,
+          priceCents: true,
+          paid: true,
+        },
+      });
+
+      const stats = {
+        paidSubscriptionPayments: payments.length,
+        paidSubscriptionRevenueCents: 0,
+        averagePaidSubscriptionCents: 0,
+        currentMonthRevenueCents: 0,
+        last30DaysRevenueCents: 0,
+        last90DaysRevenueCents: 0,
+        last30DaysPayments: 0,
+        last90DaysPayments: 0,
+        tierRevenueCents: {} as Record<string, number>,
+        billingCycleRevenueCents: {} as Record<string, number>,
+        billingCyclePaymentCounts: {} as Record<string, number>,
+      };
+
+      for (const payment of payments) {
+        const tier = payment.tier || 'unknown';
+        const billingCycle = payment.billingCycle || 'unknown';
+        const paid = payment.paid ? Number(payment.paid) : 0;
+        const priceCents = payment.priceCents || 0;
+
+        stats.paidSubscriptionRevenueCents += priceCents;
+        stats.tierRevenueCents[tier] = (stats.tierRevenueCents[tier] || 0) + priceCents;
+        stats.billingCycleRevenueCents[billingCycle] = (stats.billingCycleRevenueCents[billingCycle] || 0) + priceCents;
+        stats.billingCyclePaymentCounts[billingCycle] = (stats.billingCyclePaymentCounts[billingCycle] || 0) + 1;
+
+        if (paid >= currentMonthStart) {
+          stats.currentMonthRevenueCents += priceCents;
+        }
+
+        if (paid >= thirtyDaysAgo) {
+          stats.last30DaysRevenueCents += priceCents;
+          stats.last30DaysPayments += 1;
+        }
+
+        if (paid >= ninetyDaysAgo) {
+          stats.last90DaysRevenueCents += priceCents;
+          stats.last90DaysPayments += 1;
+        }
+      }
+
+      stats.averagePaidSubscriptionCents = payments.length > 0
+        ? Math.round(stats.paidSubscriptionRevenueCents / payments.length)
+        : 0;
+
+      return stats;
+    } catch (error) {
+      logger.error('Failed to get subscription payment stats:', error);
+      throw new Error(`Failed to get subscription payment stats: ${(error as Error).message}`);
+    }
+  }
+
   async deletePayment(id: string, pubkey: string): Promise<void> {
     try {
       await this.prisma.payment.delete({

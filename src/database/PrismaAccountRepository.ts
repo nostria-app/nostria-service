@@ -158,6 +158,99 @@ class PrismaAccountRepository extends PrismaBaseRepository {
     }
   }
 
+  async getAccountStats(): Promise<any> {
+    try {
+      const ts = now();
+      const sevenDaysAgo = ts - (7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = ts - (30 * 24 * 60 * 60 * 1000);
+      const accounts = await this.prisma.account.findMany({
+        select: {
+          tier: true,
+          expires: true,
+          created: true,
+          lastLoginDate: true,
+          username: true,
+          subscription: true,
+        },
+      });
+
+      const stats = {
+        total: accounts.length,
+        free: 0,
+        paid: 0,
+        activeSubscriptions: 0,
+        expiredSubscriptions: 0,
+        withUsername: 0,
+        newLast7Days: 0,
+        newLast30Days: 0,
+        activeLast7Days: 0,
+        activeLast30Days: 0,
+        tierCounts: {} as Record<string, number>,
+        activeTierCounts: {} as Record<string, number>,
+        expiredTierCounts: {} as Record<string, number>,
+        billingCycleCounts: {} as Record<string, number>,
+      };
+
+      for (const account of accounts) {
+        const tier = account.tier || 'unknown';
+        const expires = account.expires ? Number(account.expires) : undefined;
+        const created = Number(account.created);
+        const lastLoginDate = account.lastLoginDate ? Number(account.lastLoginDate) : undefined;
+        const billingCycle = typeof account.subscription === 'object' && account.subscription && 'billingCycle' in account.subscription
+          ? String((account.subscription as { billingCycle?: unknown }).billingCycle || 'unknown')
+          : 'unknown';
+        const isPaidTier = tier !== 'free';
+        const isActiveSubscription = isPaidTier && (!expires || expires > ts);
+        const isExpiredSubscription = isPaidTier && Boolean(expires && expires <= ts);
+
+        stats.tierCounts[tier] = (stats.tierCounts[tier] || 0) + 1;
+        stats.billingCycleCounts[billingCycle] = (stats.billingCycleCounts[billingCycle] || 0) + 1;
+
+        if (account.username) {
+          stats.withUsername += 1;
+        }
+
+        if (created >= sevenDaysAgo) {
+          stats.newLast7Days += 1;
+        }
+
+        if (created >= thirtyDaysAgo) {
+          stats.newLast30Days += 1;
+        }
+
+        if (lastLoginDate && lastLoginDate >= sevenDaysAgo) {
+          stats.activeLast7Days += 1;
+        }
+
+        if (lastLoginDate && lastLoginDate >= thirtyDaysAgo) {
+          stats.activeLast30Days += 1;
+        }
+
+        if (!isPaidTier) {
+          stats.free += 1;
+          continue;
+        }
+
+        stats.paid += 1;
+
+        if (isActiveSubscription) {
+          stats.activeSubscriptions += 1;
+          stats.activeTierCounts[tier] = (stats.activeTierCounts[tier] || 0) + 1;
+        }
+
+        if (isExpiredSubscription) {
+          stats.expiredSubscriptions += 1;
+          stats.expiredTierCounts[tier] = (stats.expiredTierCounts[tier] || 0) + 1;
+        }
+      }
+
+      return stats;
+    } catch (error) {
+      logger.error('Failed to get account stats:', error);
+      throw new Error(`Failed to get account stats: ${(error as Error).message}`);
+    }
+  }
+
   async deleteAccount(pubkey: string): Promise<void> {
     try {
       await this.prisma.account.delete({
