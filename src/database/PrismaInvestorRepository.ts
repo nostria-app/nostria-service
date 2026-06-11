@@ -19,7 +19,7 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
   private transformInvestor(prismaInvestor: any): Investor {
     return {
       id: prismaInvestor.id,
-      pubkey: prismaInvestor.pubkey,
+      pubkey: prismaInvestor.pubkey || undefined,
       npub: prismaInvestor.npub || undefined,
       displayName: prismaInvestor.displayName || undefined,
       investmentCents: prismaInvestor.investmentCents,
@@ -49,7 +49,8 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
   private transformPayout(prismaPayout: any): InvestorPayout {
     return {
       id: prismaPayout.id,
-      investorPubkey: prismaPayout.investorPubkey,
+      investorId: prismaPayout.investorId,
+      investorPubkey: prismaPayout.investorPubkey || undefined,
       periodId: prismaPayout.periodId,
       shareBasisPoints: prismaPayout.shareBasisPoints,
       sharePartsPerMillion: prismaPayout.sharePartsPerMillion,
@@ -106,8 +107,8 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
       const ts = now();
       const result = await this.prisma.investor.create({
         data: {
-          id: `investor-${input.pubkey}`,
-          pubkey: input.pubkey,
+          id: input.id || `investor-${input.pubkey}`,
+          pubkey: input.pubkey || null,
           npub: input.npub || null,
           displayName: input.displayName || null,
           investmentCents: input.investmentCents || 0,
@@ -126,11 +127,12 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     }
   }
 
-  async updateInvestor(pubkey: string, input: Partial<InvestorInput>): Promise<Investor> {
+  async updateInvestor(id: string, input: Partial<InvestorInput>): Promise<Investor> {
     try {
       const result = await this.prisma.investor.update({
-        where: { pubkey },
+        where: { id },
         data: {
+          pubkey: input.pubkey,
           npub: input.npub,
           displayName: input.displayName,
           investmentCents: input.investmentCents,
@@ -148,10 +150,10 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     }
   }
 
-  async deleteInvestor(pubkey: string): Promise<void> {
+  async deleteInvestor(id: string): Promise<void> {
     try {
       await this.prisma.investor.delete({
-        where: { pubkey },
+        where: { id },
       });
     } catch (error) {
       this.handlePrismaError(error, 'delete');
@@ -228,7 +230,8 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
   }
 
   async upsertPayout(input: {
-    investorPubkey: string;
+    investorId: string;
+    investorPubkey?: string;
     periodId: string;
     shareBasisPoints: number;
     sharePartsPerMillion: number;
@@ -239,14 +242,15 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
       const ts = now();
       const result = await this.prisma.investorPayout.upsert({
         where: {
-          investorPubkey_periodId: {
-            investorPubkey: input.investorPubkey,
+          investorId_periodId: {
+            investorId: input.investorId,
             periodId: input.periodId,
           },
         },
         create: {
           id: uuidv4(),
-          investorPubkey: input.investorPubkey,
+          investorId: input.investorId,
+          investorPubkey: input.investorPubkey || null,
           periodId: input.periodId,
           shareBasisPoints: input.shareBasisPoints,
           sharePartsPerMillion: input.sharePartsPerMillion,
@@ -292,12 +296,12 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     }
   }
 
-  async getPayoutByInvestorAndPeriod(investorPubkey: string, periodId: string): Promise<InvestorPayout | null> {
+  async getPayoutByInvestorAndPeriod(investorId: string, periodId: string): Promise<InvestorPayout | null> {
     try {
       const result = await this.prisma.investorPayout.findUnique({
         where: {
-          investorPubkey_periodId: {
-            investorPubkey,
+          investorId_periodId: {
+            investorId,
             periodId,
           },
         },
@@ -350,10 +354,10 @@ class PrismaInvestorRepository extends PrismaBaseRepository {
     }
   }
 
-  async listPayoutsByInvestor(pubkey: string, limit = 100): Promise<InvestorPayout[]> {
+  async listPayoutsByInvestor(investorId: string, limit = 100): Promise<InvestorPayout[]> {
     try {
       const results = await this.prisma.investorPayout.findMany({
-        where: { investorPubkey: pubkey },
+        where: { investorId },
         include: {
           investor: true,
           period: true,

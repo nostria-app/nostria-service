@@ -114,7 +114,7 @@ model Payment {
 
 model Investor {
   id                String           @id
-  pubkey            String           @unique
+  pubkey            String?          @unique
   npub              String?
   displayName       String?
   investmentCents   Int              @default(0)
@@ -149,7 +149,8 @@ model RevenueSharePeriod {
 
 model InvestorPayout {
   id                String             @id
-  investorPubkey    String
+  investorId        String
+  investorPubkey    String?
   periodId          String
   shareBasisPoints  Int
   sharePartsPerMillion Int
@@ -165,10 +166,11 @@ model InvestorPayout {
   paid              BigInt?
   created           BigInt
   modified          BigInt
-  investor          Investor           @relation(fields: [investorPubkey], references: [pubkey], onDelete: Cascade)
+  investor          Investor           @relation(fields: [investorId], references: [id], onDelete: Cascade)
   period            RevenueSharePeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
 
-  @@unique([investorPubkey, periodId])
+  @@unique([investorId, periodId])
+  @@index([investorId])
   @@index([investorPubkey])
   @@index([periodId])
   @@index([status])

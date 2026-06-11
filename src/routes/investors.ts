@@ -66,10 +66,19 @@ function assertCents(value: number, fieldName: string): void {
   }
 }
 
+function normalizeInvestorId(value: string): string {
+  const id = value.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,99}$/.test(id)) {
+    throw new Error('Investor ID must be 2-100 characters and use letters, numbers, dot, underscore, colon, or dash');
+  }
+  return id;
+}
+
 function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
+  const idInput = typeof body.id === 'string' ? body.id.trim() : '';
   const pubkeyInput = typeof body.pubkey === 'string' ? body.pubkey.trim() : '';
   const npubInput = typeof body.npub === 'string' ? body.npub.trim() : undefined;
-  let pubkey = pubkeyInput;
+  let pubkey: string | undefined = pubkeyInput || undefined;
   let npub = npubInput;
 
   if (pubkeyInput.startsWith('npub')) {
@@ -81,12 +90,26 @@ function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
     npub = pubkeyInput;
   }
 
-  if (!/^[a-fA-F0-9]{64}$/.test(pubkey)) {
+  if (!pubkey && npubInput?.startsWith('npub')) {
+    const decoded = nip19.decode(npubInput);
+    if (typeof decoded.data !== 'string') {
+      throw new Error('Invalid npub value');
+    }
+    pubkey = decoded.data;
+    npub = npubInput;
+  }
+
+  if (pubkey && !/^[a-fA-F0-9]{64}$/.test(pubkey)) {
     throw new Error('Investor pubkey must be a 64-character hex pubkey or npub');
   }
 
-  if (!npub) {
+  if (pubkey && !npub) {
     npub = nip19.npubEncode(pubkey.toLowerCase());
+  }
+
+  const id = idInput ? normalizeInvestorId(idInput) : pubkey ? `investor-${pubkey.toLowerCase()}` : '';
+  if (!id) {
+    throw new Error('Investor ID is required when no Nostr pubkey is provided');
   }
 
   const investmentCents = body.investmentCents ?? 0;
@@ -101,7 +124,8 @@ function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
   }
 
   return {
-    pubkey: pubkey.toLowerCase(),
+    id,
+    pubkey: pubkey?.toLowerCase(),
     npub,
     displayName: typeof body.displayName === 'string' ? body.displayName.trim() || undefined : undefined,
     investmentCents,
@@ -115,8 +139,30 @@ function normalizeInvestorInput(body: Partial<InvestorInput>): InvestorInput {
 function normalizeInvestorUpdate(body: Partial<InvestorInput>): Partial<InvestorInput> {
   const update: Partial<InvestorInput> = {};
 
+  if (body.pubkey !== undefined) {
+    const pubkeyInput = typeof body.pubkey === 'string' ? body.pubkey.trim() : '';
+    if (!pubkeyInput) {
+      update.pubkey = null;
+      update.npub = null;
+    } else if (pubkeyInput.startsWith('npub')) {
+      const decoded = nip19.decode(pubkeyInput);
+      if (typeof decoded.data !== 'string') {
+        throw new Error('Invalid npub value');
+      }
+      update.pubkey = decoded.data.toLowerCase();
+      update.npub = pubkeyInput;
+    } else {
+      if (!/^[a-fA-F0-9]{64}$/.test(pubkeyInput)) {
+        throw new Error('Investor pubkey must be a 64-character hex pubkey or npub');
+      }
+      update.pubkey = pubkeyInput.toLowerCase();
+      update.npub = body.npub === undefined ? nip19.npubEncode(pubkeyInput.toLowerCase()) : update.npub;
+    }
+  }
+
   if (body.npub !== undefined) {
-    update.npub = typeof body.npub === 'string' ? body.npub.trim() || undefined : undefined;
+    const npubInput = typeof body.npub === 'string' ? body.npub.trim() : '';
+    update.npub = npubInput || undefined;
   }
 
   if (body.displayName !== undefined) {
@@ -208,7 +254,7 @@ async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryIte
   const periods = await investorRepository.listRevenueSharePeriods(24) as RevenueSharePeriod[];
   const periodMap = new Map(periods.map(period => [period.period, period]));
   const payouts = investor
-    ? await investorRepository.listPayoutsByInvestor(investor.pubkey, 250) as InvestorPayout[]
+    ? await investorRepository.listPayoutsByInvestor(investor.id, 250) as InvestorPayout[]
     : [];
   const payoutMap = new Map(payouts.map(payout => [payout.period?.period || '', payout]));
   const history: RevenueHistoryItem[] = [];
@@ -243,7 +289,7 @@ async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryIte
 }
 
 async function buildInvestorDashboard(investor: Investor): Promise<InvestorDashboard> {
-  const payouts = await investorRepository.listPayoutsByInvestor(investor.pubkey, 100) as InvestorPayout[];
+  const payouts = await investorRepository.listPayoutsByInvestor(investor.id, 100) as InvestorPayout[];
   const paidPayoutsCents = payouts
     .filter(payout => payout.status === 'paid')
     .reduce((total, payout) => total + payout.amountCents, 0);
@@ -376,10 +422,10 @@ router.post('/admin/investors', requireAdminAuth, async (req: Request<{}, {}, In
   }
 });
 
-router.put('/admin/investors/:pubkey', requireAdminAuth, async (req: Request<{ pubkey: string }, {}, Partial<InvestorInput>>, res: Response<Investor | { error: string }>) => {
+router.put('/admin/investors/:id', requireAdminAuth, async (req: Request<{ id: string }, {}, Partial<InvestorInput>>, res: Response<Investor | { error: string }>) => {
   try {
     const update = normalizeInvestorUpdate(req.body);
-    const investor = await investorRepository.updateInvestor(req.params.pubkey.toLowerCase(), update) as Investor;
+    const investor = await investorRepository.updateInvestor(req.params.id, update) as Investor;
     return res.json(investor);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update investor';
@@ -388,9 +434,9 @@ router.put('/admin/investors/:pubkey', requireAdminAuth, async (req: Request<{ p
   }
 });
 
-router.delete('/admin/investors/:pubkey', requireAdminAuth, async (req: Request<{ pubkey: string }>, res: Response<{ success: boolean } | { error: string }>) => {
+router.delete('/admin/investors/:id', requireAdminAuth, async (req: Request<{ id: string }>, res: Response<{ success: boolean } | { error: string }>) => {
   try {
-    await investorRepository.deleteInvestor(req.params.pubkey.toLowerCase());
+    await investorRepository.deleteInvestor(req.params.id);
     return res.json({ success: true });
   } catch (error) {
     logger.error('Failed to delete investor:', error);
@@ -429,13 +475,14 @@ router.post('/admin/periods/calculate', requireAdminAuth, async (req: Request<{}
     const payouts: InvestorPayout[] = [];
 
     for (const investor of investors) {
-      const existing = await investorRepository.getPayoutByInvestorAndPeriod(investor.pubkey, revenueSharePeriod.id) as InvestorPayout | null;
+      const existing = await investorRepository.getPayoutByInvestorAndPeriod(investor.id, revenueSharePeriod.id) as InvestorPayout | null;
       if (existing?.status === 'paid') {
         payouts.push(existing);
         continue;
       }
 
       const payout = await investorRepository.upsertPayout({
+        investorId: investor.id,
         investorPubkey: investor.pubkey,
         periodId: revenueSharePeriod.id,
         shareBasisPoints: investor.shareBasisPoints,

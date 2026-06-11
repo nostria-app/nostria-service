@@ -4,8 +4,8 @@ export type InvestorPayoutStatus = 'pending' | 'processing' | 'paid' | 'failed';
 
 export interface Investor {
   id: string;
-  pubkey: string;
-  npub?: string;
+  pubkey?: string;
+  npub?: string | null;
   displayName?: string;
   investmentCents: number;
   shareBasisPoints: number;
@@ -17,8 +17,9 @@ export interface Investor {
 }
 
 export interface InvestorInput {
-  pubkey: string;
-  npub?: string;
+  id?: string;
+  pubkey?: string | null;
+  npub?: string | null;
   displayName?: string;
   investmentCents?: number;
   shareBasisPoints?: number;
@@ -41,7 +42,8 @@ export interface RevenueSharePeriod {
 
 export interface InvestorPayout {
   id: string;
-  investorPubkey: string;
+  investorId: string;
+  investorPubkey?: string;
   periodId: string;
   shareBasisPoints: number;
   sharePartsPerMillion: number;

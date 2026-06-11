@@ -78,16 +78,16 @@ export interface IInvestorRepository {
   listInvestors(includeInactive?: boolean): Promise<any[]>;
   getInvestorByPubkey(pubkey: string): Promise<any | null>;
   createInvestor(input: any): Promise<any>;
-  updateInvestor(pubkey: string, input: any): Promise<any>;
-  deleteInvestor(pubkey: string): Promise<void>;
+  updateInvestor(id: string, input: any): Promise<any>;
+  deleteInvestor(id: string): Promise<void>;
   upsertRevenueSharePeriod(input: any): Promise<any>;
   listRevenueSharePeriods(limit?: number): Promise<any[]>;
   updateRevenueSharePeriodStatus(id: string, status: string): Promise<any>;
   upsertPayout(input: any): Promise<any>;
   getPayoutById(id: string): Promise<any | null>;
-  getPayoutByInvestorAndPeriod(investorPubkey: string, periodId: string): Promise<any | null>;
+  getPayoutByInvestorAndPeriod(investorId: string, periodId: string): Promise<any | null>;
   updatePayout(id: string, input: any): Promise<any>;
-  listPayoutsByInvestor(pubkey: string, limit?: number): Promise<any[]>;
+  listPayoutsByInvestor(investorId: string, limit?: number): Promise<any[]>;
   listPayoutsByPeriod(periodId: string): Promise<any[]>;
   listRecentPayouts(limit?: number): Promise<any[]>;
 }
