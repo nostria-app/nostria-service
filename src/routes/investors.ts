@@ -28,6 +28,7 @@ const investorRepository = RepositoryFactory.getInvestorRepository();
 const paymentRepository = RepositoryFactory.getPaymentRepository();
 const DEFAULT_REVENUE_SHARE_BASIS_POINTS = 5000;
 const SHARE_PARTS_PER_MILLION_TOTAL = 1_000_000;
+const INVESTOR_REVENUE_HISTORY_START_PERIOD = '2025-06';
 
 interface InvestorSessionResponse {
   pubkey: string;
@@ -230,11 +231,13 @@ function getCurrentPeriod(): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-function getRecentPeriods(count: number): string[] {
-  const periods: string[] = [];
+function getPeriodsSince(startPeriod: string): string[] {
+  const { start } = getPeriodBounds(startPeriod);
+  const startDate = new Date(start);
   const date = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  const periods: string[] = [];
 
-  for (let index = 0; index < count; index += 1) {
+  while (date >= startDate) {
     periods.push(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`);
     date.setUTCMonth(date.getUTCMonth() - 1);
   }
@@ -273,7 +276,8 @@ async function getPlatformStats(): Promise<PlatformStats> {
 }
 
 async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryItem[]> {
-  const periods = await investorRepository.listRevenueSharePeriods(24) as RevenueSharePeriod[];
+  const historyPeriods = getPeriodsSince(INVESTOR_REVENUE_HISTORY_START_PERIOD);
+  const periods = await investorRepository.listRevenueSharePeriods(Math.max(historyPeriods.length, 24)) as RevenueSharePeriod[];
   const periodMap = new Map(periods.map(period => [period.period, period]));
   const payouts = investor
     ? await investorRepository.listPayoutsByInvestor(investor.id, 250) as InvestorPayout[]
@@ -281,7 +285,7 @@ async function getRevenueHistory(investor?: Investor): Promise<RevenueHistoryIte
   const payoutMap = new Map(payouts.map(payout => [payout.period?.period || '', payout]));
   const history: RevenueHistoryItem[] = [];
 
-  for (const period of getRecentPeriods(12)) {
+  for (const period of historyPeriods) {
     const existingPeriod = periodMap.get(period);
     const paidRevenue = await calculatePaidRevenue(period);
 
