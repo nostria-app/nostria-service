@@ -37,7 +37,6 @@ interface InvestorSessionResponse {
 
 interface CalculateRevenueShareRequest {
   period?: string;
-  revenueShareBasisPoints?: number;
   notes?: string;
 }
 
@@ -511,8 +510,7 @@ router.get('/admin/periods', requireAdminAuth, async (req: Request, res: Respons
 router.post('/admin/periods/calculate', requireAdminAuth, async (req: Request<{}, {}, CalculateRevenueShareRequest>, res: Response<{ period: RevenueSharePeriod; payouts: InvestorPayout[] } | { error: string }>) => {
   try {
     const period = req.body.period || getCurrentPeriod();
-    const revenueShareBasisPoints = req.body.revenueShareBasisPoints ?? DEFAULT_REVENUE_SHARE_BASIS_POINTS;
-    assertBasisPoints(revenueShareBasisPoints, 'revenueShareBasisPoints');
+    const revenueShareBasisPoints = DEFAULT_REVENUE_SHARE_BASIS_POINTS;
 
     const grossRevenue = await calculatePaidRevenue(period);
     const investorPoolCents = calculateInvestorPool(grossRevenue.cents, revenueShareBasisPoints);
