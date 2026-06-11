@@ -388,7 +388,7 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
 
       console.log('Updating payment status to paid:', item);
 
-      await paymentRepository.update(item);
+      const updatedPayment = await paymentRepository.update(item);
 
       if ((payment.purpose || 'subscription') === 'grok_topup') {
         await grokService.applyTopUpPayment(payment.id, payment.pubkey);
@@ -396,7 +396,7 @@ router.get('/:pubkey/:paymentId', paymentRateLimit, async (req: GetPaymentReques
 
       logger.info(`Payment completed for ${payment.pubkey}, tier: ${payment.tier}, creating/updating account`);
 
-      return res.json(toPaymentDto(payment, 'paid'));
+      return res.json(toPaymentDto(updatedPayment, 'paid'));
     }
 
     return res.json(toPaymentDto(payment, 'pending'));
