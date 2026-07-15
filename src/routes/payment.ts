@@ -88,8 +88,8 @@ interface CreatePaymentRequest {
  *           description: Document type
  *         paymentType:
  *           type: string
- *           enum: [ln]
- *           description: Payment type (Lightning Network)
+ *           enum: [ln, app-store, play-store]
+ *           description: Payment type (Lightning, App Store, or Play Store)
  *         lnHash:
  *           type: string
  *           description: Lightning payment hash
@@ -141,7 +141,7 @@ interface CreatePaymentRequest {
 interface PaymentDto {
   id: string;
   type: 'payment';
-  paymentType: 'ln';
+  paymentType: 'ln' | 'app-store' | 'play-store';
   lnHash: string;
   lnInvoice: string;
   lnAmountSat: number;
@@ -155,6 +155,9 @@ interface PaymentDto {
   status: PaymentStatus;
   created: number;
   modified: number;
+  storeTransactionId?: string;
+  storeOriginalTransactionId?: string;
+  storeProductId?: string;
 }
 
 type CreatePaymentRequestType = Request<{}, any, CreatePaymentRequest, any>;
@@ -180,6 +183,9 @@ const toPaymentDto = (payment: Payment, status: PaymentStatus): PaymentDto => ({
   status,
   created: payment.created,
   modified: payment.modified,
+  storeTransactionId: payment.storeTransactionId,
+  storeOriginalTransactionId: payment.storeOriginalTransactionId,
+  storeProductId: payment.storeProductId,
 });
 
 /**

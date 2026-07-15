@@ -28,6 +28,9 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
       pubkey: prismaPayment.pubkey,
       created: Number(prismaPayment.created),
       modified: Number(prismaPayment.modified),
+      storeTransactionId: prismaPayment.storeTransactionId || undefined,
+      storeOriginalTransactionId: prismaPayment.storeOriginalTransactionId || undefined,
+      storeProductId: prismaPayment.storeProductId || undefined,
     };
   }
 
@@ -51,6 +54,9 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
         pubkey: payment.pubkey,
         created: BigInt(payment.created),
         modified: BigInt(payment.modified),
+        storeTransactionId: payment.storeTransactionId || null,
+        storeOriginalTransactionId: payment.storeOriginalTransactionId || null,
+        storeProductId: payment.storeProductId || null,
       };
 
       const result = await this.prisma.payment.create({
@@ -81,6 +87,9 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
         applied: payment.applied ? BigInt(payment.applied) : null,
         expires: BigInt(payment.expires),
         modified: BigInt(payment.modified || now()),
+        storeTransactionId: payment.storeTransactionId || null,
+        storeOriginalTransactionId: payment.storeOriginalTransactionId || null,
+        storeProductId: payment.storeProductId || null,
       };
 
       const result = await this.prisma.payment.update({
@@ -107,6 +116,19 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
       return result ? this.transformPrismaPaymentToPayment(result) : null;
     } catch (error) {
       logger.error('Failed to get payment by id:', error);
+      throw new Error(`Failed to get payment: ${(error as Error).message}`);
+    }
+  }
+
+  async getByStoreTransactionId(storeTransactionId: string): Promise<Payment | null> {
+    try {
+      const result = await this.prisma.payment.findUnique({
+        where: { storeTransactionId },
+      });
+
+      return result ? this.transformPrismaPaymentToPayment(result) : null;
+    } catch (error) {
+      logger.error('Failed to get payment by storeTransactionId:', error);
       throw new Error(`Failed to get payment: ${(error as Error).message}`);
     }
   }

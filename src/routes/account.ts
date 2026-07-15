@@ -11,9 +11,11 @@ import { features } from '../config/features';
 import RepositoryFactory from '../database/RepositoryFactory';
 import { Account } from '../models/account';
 import { AccountSubscription, DEFAULT_SUBSCRIPTION, expiresAt, extendExpiry } from '../models/accountSubscription';
-import { Entitlements, Tier } from '../config/types';
+import { BillingCycle, Entitlements, Tier } from '../config/types';
 import { now } from '../helpers/now';
 import validateUsername from './account/validateUsername';
+import storePurchaseService, { StorePurchaseError } from '../services/StorePurchaseService';
+import { StoreName } from '../services/storeProductCatalog';
 
 // Get repository instances from factory
 const accountRepository = RepositoryFactory.getAccountRepository();
@@ -682,12 +684,12 @@ router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: Renew
     }
 
     // Calculate new expiry date (extends if not expired, otherwise starts fresh)
-    const newExpiry = extendExpiry(account.expires, payment.billingCycle);
+    const newExpiry = extendExpiry(account.expires, payment.billingCycle as BillingCycle);
 
     // Build new subscription
     const subscription: AccountSubscription = {
       tier: payment.tier,
-      billingCycle: payment.billingCycle,
+      billingCycle: payment.billingCycle as BillingCycle,
       price: {
         priceCents: payment.priceCents,
         currency: 'USD',
@@ -728,6 +730,141 @@ router.post('/renew', authUser, async (req: RenewSubscriptionRequest, res: Renew
     return res.status(500).json({ error: 'Failed to renew subscription' });
   }
 });
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     VerifyStorePurchaseRequest:
+ *       type: object
+ *       required:
+ *         - purchaseToken
+ *         - pubkey
+ *         - store
+ *       properties:
+ *         purchaseToken:
+ *           type: string
+ *           description: StoreKit 2 JWS / transaction id (App Store) or purchase token (Play)
+ *         pubkey:
+ *           type: string
+ *           description: User's public key in hex format
+ *         store:
+ *           type: string
+ *           enum: [app-store, play-store]
+ *         productId:
+ *           type: string
+ *           description: Store product id (required for Play Store)
+ *         username:
+ *           type: string
+ *           nullable: true
+ *           description: Optional username to claim on first upgrade
+ *         jwsRepresentation:
+ *           type: string
+ *           description: Optional explicit App Store JWS (preferred over raw transaction id)
+ *     VerifyStorePurchaseResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *         alreadyProcessed:
+ *           type: boolean
+ *         paymentId:
+ *           type: string
+ *         store:
+ *           type: string
+ *         productId:
+ *           type: string
+ *         transactionId:
+ *           type: string
+ *         account:
+ *           $ref: '#/components/schemas/Account'
+ */
+interface VerifyStorePurchaseBody {
+  purchaseToken: string;
+  pubkey: string;
+  store: StoreName;
+  productId?: string;
+  username?: string | null;
+  jwsRepresentation?: string;
+}
+
+/**
+ * @openapi
+ * /account/verify-store-purchase:
+ *   post:
+ *     operationId: "VerifyStorePurchase"
+ *     summary: Verify native store purchase and activate subscription
+ *     description: |
+ *       Verifies an App Store (StoreKit 2) or Google Play purchase token with the platform,
+ *       creates a paid payment record, and creates or extends the user's subscription.
+ *       Idempotent on store transaction id.
+ *     tags:
+ *       - Account
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/VerifyStorePurchaseRequest'
+ *     responses:
+ *       '200':
+ *         description: Purchase verified and subscription activated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/VerifyStorePurchaseResponse'
+ *       '400':
+ *         description: Invalid request or verification failed
+ *       '409':
+ *         description: Username conflict or transaction linked to another account
+ *       '503':
+ *         description: Store verification is not configured
+ *       '500':
+ *         description: Server error
+ */
+router.post(
+  '/verify-store-purchase',
+  signupRateLimit,
+  async (req: Request<{}, any, VerifyStorePurchaseBody>, res: Response) => {
+    try {
+      const { purchaseToken, pubkey, store, productId, username, jwsRepresentation } = req.body || {};
+
+      if (!purchaseToken || !pubkey || !store) {
+        return res.status(400).json({
+          error: 'purchaseToken, pubkey, and store are required',
+        });
+      }
+
+      const result = await storePurchaseService.verifyAndActivate({
+        purchaseToken,
+        pubkey,
+        store,
+        productId,
+        username,
+        jwsRepresentation,
+      });
+
+      return res.status(200).json({
+        success: true,
+        alreadyProcessed: result.alreadyProcessed,
+        paymentId: result.paymentId,
+        store: result.store,
+        productId: result.productId,
+        transactionId: result.transactionId,
+        account: toAccountDto(result.account),
+      });
+    } catch (error: unknown) {
+      if (error instanceof StorePurchaseError) {
+        logger.warn(`Store purchase verification rejected: ${error.message}`);
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to verify store purchase';
+      logger.error(`Error verifying store purchase: ${message}`);
+      return res.status(400).json({ error: message });
+    }
+  }
+);
 
 /**
  * @openapi

@@ -103,12 +103,17 @@ model Payment {
   pubkey       String
   created      BigInt
   modified     BigInt
+  /// App Store / Play Store transaction id (unique for idempotency)
+  storeTransactionId String? @unique
+  storeOriginalTransactionId String?
+  storeProductId String?
 
   @@index([pubkey])
   @@index([lnHash])
   @@index([isPaid])
   @@index([expires])
   @@index([purpose])
+  @@index([storeOriginalTransactionId])
   @@map("payments")
 }
 
