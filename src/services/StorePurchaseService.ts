@@ -39,6 +39,14 @@ export interface VerifyStorePurchaseResult {
   transactionId: string;
 }
 
+export interface StoreRenewalResult {
+  handled: boolean;
+  pubkey?: string;
+  action?: 'renewed' | 'revoked' | 'already-processed';
+  paymentId?: string;
+  reason?: string;
+}
+
 const TIER_PRIORITY: Record<Tier, number> = {
   free: 0,
   basic: 1,
@@ -201,6 +209,115 @@ export class StorePurchaseService {
       productId,
       transactionId,
     };
+  }
+
+  /**
+   * Apply an App Store / Play Store renewal (or refund) reported by a server notification.
+   * Resolves the account from an earlier payment with the same original transaction id.
+   */
+  async applyStoreRenewal(params: {
+    store: StoreName;
+    transactionId: string;
+    originalTransactionId: string;
+    productId: string;
+    purchaseDateMs: number;
+    expiresDateMs?: number;
+    revoked?: boolean;
+  }): Promise<StoreRenewalResult> {
+    const previous = await this.paymentRepository.getLatestByStoreOriginalTransactionId(
+      params.originalTransactionId
+    );
+
+    if (!previous) {
+      return { handled: false, reason: 'No prior payment for this original transaction id' };
+    }
+
+    const pubkey = previous.pubkey as string;
+
+    if (params.revoked) {
+      await this.revokeSubscription(pubkey, params.expiresDateMs);
+      return { handled: true, pubkey, action: 'revoked' };
+    }
+
+    const existingPayment = await this.paymentRepository.getByStoreTransactionId(
+      params.transactionId
+    );
+    if (existingPayment) {
+      return { handled: true, pubkey, action: 'already-processed' };
+    }
+
+    const catalogProduct = getStoreProduct(params.productId);
+    if (!catalogProduct) {
+      return { handled: false, reason: `Unknown store productId: ${params.productId}` };
+    }
+
+    const tier = catalogProduct.tier;
+    const billingCycle = catalogProduct.billingCycle;
+    const priceCents = resolvePriceCents(catalogProduct);
+    const ts = now();
+
+    const payment: Payment = {
+      id: `payment-store-${uuidv4()}`,
+      type: 'payment',
+      paymentType: params.store,
+      lnHash: params.originalTransactionId,
+      lnInvoice: params.store,
+      lnAmountSat: 0,
+      purpose: 'subscription',
+      tier,
+      billingCycle,
+      priceCents,
+      pubkey,
+      isPaid: true,
+      paid: params.purchaseDateMs || ts,
+      applied: ts,
+      expires: ts,
+      created: ts,
+      modified: ts,
+      storeTransactionId: params.transactionId,
+      storeOriginalTransactionId: params.originalTransactionId,
+      storeProductId: params.productId,
+    };
+
+    await this.paymentRepository.create(payment);
+
+    await this.applySubscriptionToAccount({
+      pubkey,
+      tier,
+      billingCycle,
+      priceCents,
+      expiresDateMs: params.expiresDateMs,
+    });
+
+    logger.info(
+      `Store renewal applied: store=${params.store} product=${params.productId} ` +
+        `tx=${params.transactionId} pubkey=${pubkey.substring(0, 16)}...`
+    );
+
+    return { handled: true, pubkey, action: 'renewed', paymentId: payment.id };
+  }
+
+  /** Cut a subscription short after a refund/revocation reported by the store. */
+  private async revokeSubscription(pubkey: string, expiresDateMs?: number): Promise<void> {
+    const account = await this.accountRepository.getByPubkey(pubkey);
+    if (!account) {
+      return;
+    }
+
+    const ts = now();
+    const newExpiry = Math.min(account.expires ?? ts, expiresDateMs ?? ts);
+
+    await this.accountRepository.update({
+      ...account,
+      expires: newExpiry,
+      modified: ts,
+    });
+
+    logger.warn(
+      `Store subscription revoked for ${pubkey.substring(0, 16)}..., expires=${new Date(
+        newExpiry
+      ).toISOString()}`
+    );
   }
 
   private async applySubscriptionToAccount(params: {

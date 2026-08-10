@@ -133,6 +133,22 @@ class PrismaPaymentRepository extends PrismaBaseRepository {
     }
   }
 
+  async getLatestByStoreOriginalTransactionId(
+    storeOriginalTransactionId: string
+  ): Promise<Payment | null> {
+    try {
+      const result = await this.prisma.payment.findFirst({
+        where: { storeOriginalTransactionId },
+        orderBy: { created: 'desc' },
+      });
+
+      return result ? this.transformPrismaPaymentToPayment(result) : null;
+    } catch (error) {
+      logger.error('Failed to get payment by storeOriginalTransactionId:', error);
+      throw new Error(`Failed to get payment: ${(error as Error).message}`);
+    }
+  }
+
   async getAllPayments(limit: number = 100): Promise<Payment[]> {
     try {
       const results = await this.prisma.payment.findMany({

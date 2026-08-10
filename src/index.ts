@@ -27,6 +27,7 @@ import usersRoutes from './routes/users';
 import xRoutes from './routes/x';
 import grokRoutes from './routes/grok';
 import investorRoutes from './routes/investors';
+import storeRoutes from './routes/store';
 
 // Import middleware
 import { apiKeyAuth } from './middleware/auth';
@@ -134,6 +135,7 @@ app.use('/api/settings', settingsRoutes); // User settings endpoints
 app.use('/api/x', xRoutes); // X dual-posting endpoints
 app.use('/api/grok', grokRoutes); // xAI/Grok proxy and balance endpoints
 app.use('/api/investors', investorRoutes); // Investor dashboard and revenue sharing endpoints
+app.use('/api/store', storeRoutes); // App Store / Play Store notifications and diagnostics
 app.use('/api/users', apiKeyAuth, usersRoutes); // Protected users endpoint
 
 // Error handling middleware

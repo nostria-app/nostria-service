@@ -34,6 +34,7 @@ export interface IPaymentRepository {
   update(payment: any): Promise<any>;
   get(id: string, pubkey: string): Promise<any | null>;
   getByStoreTransactionId(storeTransactionId: string): Promise<any | null>;
+  getLatestByStoreOriginalTransactionId(storeOriginalTransactionId: string): Promise<any | null>;
   getAllPayments(limit?: number): Promise<any[]>;
   getPaymentsByPubkey(pubkey: string, limit?: number): Promise<any[]>;
   getPaidSubscriptionPaymentsBetween(start: number, end: number): Promise<any[]>;
